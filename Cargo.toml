@@ -1,6 +1,3 @@
-[package]
-name = "telo"
-version = "0.1.0"
-edition = "2021"
-authors = ["Aria Andika"]
-readme = "README.md"
+[workspace]
+members = ["tcio"]
+resolver = "2"
