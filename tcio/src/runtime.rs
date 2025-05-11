@@ -1,37 +1,70 @@
 //! entrypoint to start the server
-use crate::service::{tcp::TcpService, HttpService, Service};
-use log::debug;
 use std::{
     io,
-    net::{TcpListener as StdListener, ToSocketAddrs},
+    pin::Pin,
     sync::Arc,
+    task::{Context, Poll, ready},
 };
-use tokio::net::TcpListener as TokioListener;
+use tokio::net::{TcpListener, ToSocketAddrs};
 
-/// listen to tcp listener via tokio runtime
-pub fn listen<S>(addr: impl ToSocketAddrs, service: S) -> io::Result<()>
-where
-    S: HttpService
-{
-    let tcp = StdListener::bind(addr).map_err(tcp_err)?;
-    tcp.set_nonblocking(true)?;
+use crate::service::{HttpService, Service, tcp::TcpService};
 
-    tokio::runtime::Builder::new_multi_thread()
-        .enable_all()
-        .build()?
-        .block_on(async move {
-            let tcp = TokioListener::from_std(tcp)?;
-            let arc = Arc::new(service);
-            loop {
-                match tcp.accept().await {
-                    Ok((stream,_)) => { tokio::spawn(TcpService::new(arc.clone()).call(stream)); },
-                    Err(err) => { debug!("failed to accept client: {err}"); },
-                }
-            }
-        })
+pub fn listen<S: HttpService>(
+    addr: impl ToSocketAddrs,
+    service: S,
+) -> Serve<S, impl Future<Output = io::Result<TcpListener>>> {
+    Serve {
+        phase: Phase::P1 {
+            f: TcpListener::bind(addr),
+        },
+        service: Arc::new(service),
+    }
 }
 
-fn tcp_err(err: io::Error) -> io::Error {
-    io::Error::new(err.kind(), format!("failed to bind tcp: {err}"))
+pin_project_lite::pin_project! {
+    pub struct Serve<S, F> {
+        #[pin]
+        phase: Phase<F>,
+        service: Arc<S>,
+    }
+}
+
+pin_project_lite::pin_project! {
+    #[project = PJ]
+    #[project_replace = PR]
+    enum Phase<F> {
+        P1 { #[pin] f: F },
+        P2 { tcp: TcpListener },
+    }
+}
+
+impl<S, F> Future for Serve<S, F>
+where
+    S: HttpService,
+    F: Future<Output = io::Result<TcpListener>>,
+{
+    type Output = io::Result<()>;
+
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        let mut me = self.project();
+
+        if let PJ::P1 { f } = me.phase.as_mut().project() {
+            let ok = ready!(f.poll(cx)?);
+            me.phase.as_mut().project_replace(Phase::P2 { tcp: ok });
+        }
+
+        let PJ::P2 { tcp } = me.phase.as_mut().project() else {
+            unreachable!()
+        };
+
+        loop {
+            match ready!(tcp.poll_accept(cx)) {
+                Ok((io, _)) => {
+                    tokio::spawn(TcpService::new(me.service.clone()).call(io));
+                }
+                Err(_err) => {}
+            }
+        }
+    }
 }
 
