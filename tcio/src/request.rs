@@ -1,7 +1,7 @@
 //! http request
 use crate::http::{Header, Method, Version, HEADER_SIZE};
 use crate::IntoResponse;
-use crate::{body::Body, bytestr::ByteStr};
+use crate::{body::Body, common::ByteStr};
 
 pub use parser::{parse, ParseError};
 

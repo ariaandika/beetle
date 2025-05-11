@@ -1,5 +1,5 @@
 //! http protocol
-use crate::bytestr::ByteStr;
+use crate::common::ByteStr;
 use bytes::Bytes;
 
 mod status;

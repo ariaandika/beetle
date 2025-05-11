@@ -1,5 +1,5 @@
 use super::{Parts, Response};
-use crate::{bytestr::ByteStr, http::Header};
+use crate::{common::ByteStr, http::Header};
 use bytes::{Bytes, BytesMut};
 
 

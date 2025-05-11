@@ -1,5 +1,5 @@
 use super::Parts;
-use crate::bytestr::ByteStr;
+use crate::common::ByteStr;
 use crate::http::{Header, Method, Version, HEADER_SIZE};
 use bytes::{Buf, BytesMut};
 use std::str::Utf8Error;
