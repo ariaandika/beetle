@@ -6,13 +6,13 @@ pub fn service_fn<F>(f: F) -> ServiceFn<F> {
 
 #[derive(Clone)]
 pub struct ServiceFn<F> {
-    f: F
+    f: F,
 }
 
-impl<Request,Response,Error,F,Fut> Service<Request> for ServiceFn<F>
+impl<Request, Response, Error, F, Fut> Service<Request> for ServiceFn<F>
 where
     F: Fn(Request) -> Fut,
-    Fut: Future<Output = Result<Response,Error>>
+    Fut: Future<Output = Result<Response, Error>>,
 {
     type Response = Response;
     type Error = Error;
@@ -22,4 +22,3 @@ where
         (self.f)(request)
     }
 }
-

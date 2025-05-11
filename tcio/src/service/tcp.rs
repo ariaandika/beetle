@@ -1,13 +1,4 @@
-use super::HttpService;
-use crate::{
-    body::Body,
-    request::{self, Request},
-    response::{self, IntoResponse},
-    service::Service,
-    task::{StreamFuture, StreamHandle},
-};
 use bytes::BytesMut;
-use log::{debug, error, trace};
 use std::{
     mem,
     pin::Pin,
@@ -16,7 +7,16 @@ use std::{
 };
 use tokio::net::TcpStream;
 
-#[derive(Clone)]
+use super::HttpService;
+use crate::{
+    body::Body,
+    request::{self, Request},
+    response::{self, IntoResponse},
+    service::Service,
+    task::{StreamFuture, StreamHandle},
+};
+
+#[derive(Debug, Clone)]
 pub struct TcpService<S> {
     inner: S,
 }
@@ -29,15 +29,17 @@ impl<S> TcpService<S> {
 
 impl<S> Service<TcpStream> for TcpService<S>
 where
-    S: HttpService + Clone
+    S: HttpService + Clone,
 {
     type Response = ();
-    // error will only be ignored in top level service
+
     type Error = ();
-    type Future = TcpFuture<S,S::Future>;
+
+    type Future = TcpFuture<S, S::Future>;
 
     fn call(&self, stream: TcpStream) -> Self::Future {
-        trace!("connection open");
+        #[cfg(feature = "log")]
+        log::trace!("connection open");
         TcpFuture {
             inner: self.inner.clone(),
             buffer: BytesMut::with_capacity(1024),
@@ -52,8 +54,9 @@ macro_rules! unwrap {
     ($body:expr) => {
         match $body {
             Ok(ok) => ok,
-            Err(err) => {
-                error!("{err}");
+            Err(_err) => {
+                #[cfg(feature = "log")]
+                log::error!("{_err}");
                 return Poll::Ready(Ok(()))
             },
         }
@@ -126,7 +129,8 @@ where
                     let (read,rx) = ready!(rx.poll(cx));
                     *buffer = rx;
                     if read == 0 {
-                        trace!("connection closed");
+                        #[cfg(feature = "log")]
+                        log::trace!("connection closed");
                         return Ready(Ok(()));
                     }
                     state.set(TcpState::Parse);
@@ -135,7 +139,8 @@ where
                     let parts = match unwrap!(request::parse(buffer)) {
                         Some(ok) => ok,
                         None => {
-                            debug!("buffer should be unique to reclaim: {:?}",buffer.try_reclaim(1024));
+                            #[cfg(feature = "log")]
+                            log::debug!("buffer should be unique to reclaim: {:?}",buffer.try_reclaim(1024));
                             state.set(TcpState::Init);
                             continue;
                         },
@@ -180,11 +185,13 @@ where
                     buffer.clear();
 
                     if !buffer.try_reclaim(1024) {
-                        debug!("failed to reclaim buffer");
+                        #[cfg(feature = "log")]
+                        log::debug!("failed to reclaim buffer");
                     }
 
                     if !res_buffer.try_reclaim(1024) {
-                        debug!("failed to reclaim res_buffer");
+                        #[cfg(feature = "log")]
+                        log::debug!("failed to reclaim res_buffer");
                     }
 
                     state.set(TcpState::Init);

@@ -1,4 +1,6 @@
 //! service utility types
+use std::convert::Infallible;
+
 use super::Service;
 use crate::{
     futures::{EitherInto, FutureExt},
@@ -7,7 +9,6 @@ use crate::{
     request::Request,
     response::{IntoResponse, Response},
 };
-use std::convert::Infallible;
 
 impl<Req,Res,Er,L,R> Service<Req> for Either<L,R>
 where
@@ -15,7 +16,9 @@ where
     R: Service<Req, Response = Res, Error = Er>,
 {
     type Response = Res;
+
     type Error = Er;
+
     type Future = EitherInto<L::Future,R::Future,Result<Res,Er>>;
 
     fn call(&self, req: Req) -> Self::Future {
@@ -44,5 +47,5 @@ macro_rules! status_service {
     };
 }
 
-status_service!("service 404 Not Found" NotFound NOT_FOUND);
-status_service!("service 405 Method Not Alowed" MethodNotAllowed METHOD_NOT_ALLOWED);
+status_service!("Service 404 Not Found." NotFound NOT_FOUND);
+status_service!("Service 405 Method Not Alowed." MethodNotAllowed METHOD_NOT_ALLOWED);
