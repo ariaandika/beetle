@@ -6,8 +6,10 @@ edition = "2024"
 [dependencies]
 bytes = "1.10.1"
 itoa = "1.0.15"
+log = { version = "0.4.27", optional = true }
 pin-project-lite = "0.2.16"
 tokio = { version = "1.45.0", features = ["net", "rt"], optional = true }
 
 [features]
 tokio = ["dep:tokio"]
+log = ["dep:log"]
