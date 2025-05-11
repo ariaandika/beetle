@@ -1,17 +1,18 @@
 //! request routing
+use std::convert::Infallible;
+
 use crate::{
     futures::{EitherInto, FutureExt},
     helpers::Layer,
     http::Method,
     request::Request,
     response::Response,
-    route::handler::HandlerService,
+    routing::handler::HandlerService,
     service::{
-        http::{MethodNotAllowed, NotFound},
         HttpService, Service,
+        http::{MethodNotAllowed, NotFound},
     },
 };
-use std::convert::Infallible;
 
 pub mod handler;
 
@@ -63,13 +64,17 @@ impl<S> Router<S> {
 
 impl<S> Router<S>
 where
-    S: HttpService
+    S: HttpService,
 {
     /// alternative way to start server
+    #[cfg(feature = "tokio")]
     pub fn listen(
         self,
-        addr: impl std::net::ToSocketAddrs + std::fmt::Display + Clone,
-    ) -> Result<(), std::io::Error> {
+        addr: impl tokio::net::ToSocketAddrs + std::fmt::Display + Clone,
+    ) -> crate::runtime::Serve<
+        Router<S>,
+        impl Future<Output = Result<tokio::net::TcpListener, std::io::Error>>,
+    > {
         crate::listen(addr, self)
     }
 }
