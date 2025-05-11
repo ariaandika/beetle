@@ -75,11 +75,11 @@
 //!
 //! # Application Flow
 //!
-//! Tsue framework provide multiple level of API to provide both convinient and low level control.
+//! Beetle framework provide multiple level of API to provide both convinient and low level control.
 //!
 //! ## Starting Server
 //!
-//! Application starts by building a [`Service`], which is required to start tsue server. The
+//! Application starts by building a [`Service`], which is required to start beetle server. The
 //! service is required to be a service with `Request` of [`Request<ReqBody>`],
 //! `Response` of [`Response<ResBody>`], and any error that implement [`std::error::Error`].
 //! This service is aliased as [`HttpService`] for convinient. The [`Service`] then can be
@@ -90,7 +90,7 @@
 //!
 //! ## Building [`Service`] via [`Router`]
 //!
-//! To build a [`Service`], tsue framework provide the [`Router`] API. The [`Router`] API is a builder
+//! To build a [`Service`], beetle framework provide the [`Router`] API. The [`Router`] API is a builder
 //! to the [`Service`] trait that provide features expected from modern concept of http server,
 //! such as [routing][self#Routing] and [middleware][self#Middleware].
 //!
@@ -108,7 +108,7 @@
 //! ## Handler
 //!
 //! A handler is a user defined operation that contains a bussiness logic. Specifically, a handler
-//! is just another [`HttpService`]. Tsue provide APIs that will make bulding handler easier.
+//! is just another [`HttpService`]. beetle provide APIs that will make bulding handler easier.
 //!
 //! Using [`ServiceFn`], user can create a handler just from an async function. The function,
 //! can accept multiple arguments that implement [`FromRequestParts`] and single argument that
