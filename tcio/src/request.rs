@@ -41,7 +41,6 @@ impl Parts {
 }
 
 /// an http request
-#[derive(Default)]
 pub struct Request {
     parts: Parts,
     body: Body,

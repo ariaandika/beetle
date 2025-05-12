@@ -52,6 +52,10 @@ fn_router!(patch PATCH "setup PATCH service");
 fn_router!(delete DELETE "setup DELETE service");
 
 impl<S, F> Branch<S, F> {
+    pub fn new(matcher: impl Into<Matcher>, inner: S, fallback: F) -> Self {
+        Self { matcher: matcher.into(), inner, fallback }
+    }
+
     fn_router!(self get GET "add GET service");
     fn_router!(self post POST "add POST service");
     fn_router!(self put PUT "add PUT service");

@@ -8,11 +8,10 @@ pub mod http;
 pub mod request;
 pub mod response;
 
-pub mod task;
 pub mod body;
 
 pub mod helpers;
-pub mod futures;
+mod futures;
 
 pub mod service;
 pub mod routing;

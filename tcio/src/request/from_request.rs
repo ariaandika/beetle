@@ -1,10 +1,17 @@
 use bytes::{Bytes, BytesMut};
-use super::{FromRequest, FromRequestParts, Parts, Request};
-use crate::{futures::{FutureExt, Map, MapErr, MapOk, TryFutureExt}, http::Method, response::BadRequest, task::StreamFuture};
 use std::{
     convert::Infallible,
-    future::{ready, Ready},
-    io, string::FromUtf8Error,
+    future::{Ready, ready},
+    io,
+    string::FromUtf8Error,
+};
+
+use super::{FromRequest, FromRequestParts, Parts, Request};
+use crate::{
+    body::Collect,
+    futures::{FutureExt, Map, MapErr, MapOk, TryFutureExt},
+    http::Method,
+    response::BadRequest,
 };
 
 // NOTE:
@@ -72,8 +79,8 @@ from_request! {
 from_request! {
     BytesMut,
     Error = BadRequest<io::Error>;
-    Future = MapErr<StreamFuture<BytesMut>, fn(io::Error) -> BadRequest<io::Error>>;
-    (req) => req.into_body().bytes_mut().map_err(BadRequest)
+    Future = MapErr<Collect, fn(io::Error) -> BadRequest<io::Error>>;
+    (req) => req.into_body().collect().map_err(BadRequest)
 }
 
 from_request! {

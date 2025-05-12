@@ -45,20 +45,13 @@ impl<S> Router<S> {
     /// assign new route
     pub fn route<R>(self, matcher: impl Into<Matcher>, route: R) -> Router<Branch<R, S>> {
         Router {
-            inner: Branch {
-                matcher: matcher.into(),
-                inner: route,
-                fallback: self.inner,
-            },
+            inner: Branch::new(matcher, route, self.inner),
         }
     }
 
     pub fn state<T>(self, state: T) -> Router<State<T, S>> {
         Router {
-            inner: State {
-                state,
-                inner: self.inner,
-            },
+            inner: State::new(state, self.inner),
         }
     }
 }

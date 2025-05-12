@@ -9,6 +9,12 @@ pub struct State<T, S> {
     inner: S,
 }
 
+impl<T, S> State<T, S> {
+    pub fn new(state: T, inner: S) -> Self {
+        Self { state, inner }
+    }
+}
+
 impl<T, S> Service<Request> for State<T, S>
 where
     T: Clone + Send + Sync + 'static,
