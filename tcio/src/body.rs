@@ -1,9 +1,9 @@
 //! request and response body struct
-use bytes::{Bytes, BytesMut};
+use bytes::{Buf, BufMut, Bytes, BytesMut};
 use std::{
     io,
     pin::{Pin, pin},
-    sync::{Arc, Mutex},
+    sync::Arc,
     task::{
         Context,
         Poll::{self, *},
@@ -16,16 +16,16 @@ use tokio::net::TcpStream;
 //
 // lock based body reader
 pub struct Body {
-    shared: Arc<Mutex<TcpStream>>,
+    io: Arc<TcpStream>,
     content_len: usize,
     read_len: usize,
     buffer: BytesMut,
 }
 
 impl Body {
-    pub(crate) fn new(shared: Arc<Mutex<TcpStream>>, content_len: usize, buffer: BytesMut) -> Self {
+    pub(crate) fn new(shared: Arc<TcpStream>, content_len: usize, buffer: BytesMut) -> Self {
         Self {
-            shared,
+            io: shared,
             content_len,
             read_len: 0,
             buffer,
@@ -63,9 +63,7 @@ impl Body {
 }
 
 impl Body {
-    pub fn collect(self) {
-        
-    }
+    pub fn collect(self) {}
 
     pub(crate) fn poll_read(self: Pin<&mut Self>, cx: &mut Context) -> Poll<io::Result<()>> {
         if self.read_len >= self.content_len {
@@ -76,18 +74,16 @@ impl Body {
         }
 
         let me = self.get_mut();
-        let lock = match me.shared.try_lock() {
-            Ok(ok) => ok,
-            Err(_) => {
-                return Ready(Err(io::Error::new(
-                    io::ErrorKind::ResourceBusy,
-                    "unable to lock for body read",
-                )));
-            }
-        };
+        ready!(pin!(me.io.readable()).poll(cx)?);
 
-        ready!(pin!(lock.readable()).poll(cx)?);
-        let read = lock.try_read_buf(&mut me.buffer)?;
+        let read = {
+            let buf = me.buffer.chunk_mut();
+            let buf = unsafe {
+                &mut *(buf.as_uninit_slice_mut() as *mut [std::mem::MaybeUninit<u8>] as *mut [u8])
+            };
+            me.io.try_read(buf)?
+        };
+        unsafe { me.buffer.advance_mut(read) };
 
         me.read_len += read;
 
@@ -133,6 +129,19 @@ impl ResBody {
             ResBody::Empty => true,
             ResBody::Bytes(b) => b.is_empty(),
         }
+    }
+
+    pub(crate) fn poll_write_all_tcp(&mut self, _: &mut Context, io: &TcpStream) -> Poll<io::Result<()>> {
+        while !self.is_empty() {
+            match self {
+                ResBody::Empty => {},
+                ResBody::Bytes(buf) => {
+                    let read = io.try_write(buf)?;
+                    buf.advance(read);
+                },
+            }
+        }
+        Poll::Ready(Ok(()))
     }
 }
 
