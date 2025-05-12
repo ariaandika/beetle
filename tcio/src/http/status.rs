@@ -1,10 +1,10 @@
-//! the [`StatusCode`] struct
+/// HTTP Status Code.
 use std::{
     fmt::{Debug, Display, Formatter},
     num::NonZeroU16,
 };
 
-/// an http status code
+/// HTTP Status Code.
 #[derive(Clone, Copy)]
 pub struct StatusCode(NonZeroU16);
 

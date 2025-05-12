@@ -64,9 +64,9 @@ pub fn parse(buf: &mut BytesMut) -> Result<Option<Parts>,ParseError> {
 
     let version = collect_word!();
     let version = match &version[..] {
-        b"HTTP/1.0" => Version::Http10,
-        b"HTTP/1.1" => Version::Http11,
-        b"HTTP/2" => Version::Http2,
+        b"HTTP/1.0" => Version::V10,
+        b"HTTP/1.1" => Version::V11,
+        b"HTTP/2" => Version::V2,
         _ => return Err(format!("invalid version: {version:?}").into()),
     };
 
