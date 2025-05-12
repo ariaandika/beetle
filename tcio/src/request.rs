@@ -1,21 +1,24 @@
 //! http request
-use crate::http::{Header, Method, Version, HEADER_SIZE};
-use crate::IntoResponse;
-use crate::{body::Body, common::ByteStr};
-
-pub use parser::{parse, ParseError};
+use crate::{
+    IntoResponse,
+    body::Body,
+    common::{Anymap, ByteStr},
+    http::{HEADER_SIZE, Header, Method, Version},
+};
 
 mod from_request;
 mod parser;
 
+pub use parser::{ParseError, parse};
+
 /// an http request parts
-#[derive(Default)]
 pub struct Parts {
     method: Method,
     path: ByteStr,
     version: Version,
     headers: [Header;HEADER_SIZE],
     header_len: usize,
+    extensions: Anymap,
 }
 
 impl Parts {
@@ -37,6 +40,14 @@ impl Parts {
     /// getter for http headers
     pub fn headers(&self) -> &[Header] {
         &self.headers[..self.header_len]
+    }
+
+    pub fn extensions(&self) -> &Anymap {
+        &self.extensions
+    }
+
+    pub fn extensions_mut(&mut self) -> &mut Anymap {
+        &mut self.extensions
     }
 }
 
@@ -65,6 +76,10 @@ impl Request {
     /// destruct request into [`Body`]
     pub fn into_body(self) -> Body {
         self.body
+    }
+
+    pub fn extensions_mut(&mut self) -> &mut Anymap {
+        &mut self.parts.extensions
     }
 }
 

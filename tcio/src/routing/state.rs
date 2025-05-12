@@ -4,7 +4,6 @@ use crate::{
 };
 
 pub struct State<T, S> {
-    #[allow(dead_code)]
     state: T,
     inner: S,
 }
@@ -24,8 +23,9 @@ where
     type Error = S::Error;
     type Future = S::Future;
 
-    fn call(&self, req: Request) -> Self::Future {
-        // TODO: req.extensions_mut().insert(self.state.clone());
+    fn call(&self, mut req: Request) -> Self::Future {
+        req.extensions_mut().insert(self.state.clone());
         self.inner.call(req)
     }
 }
+

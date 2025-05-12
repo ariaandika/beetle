@@ -1,5 +1,5 @@
 use super::Parts;
-use crate::common::ByteStr;
+use crate::common::{Anymap, ByteStr};
 use crate::http::{Header, Method, Version, HEADER_SIZE};
 use bytes::{Buf, BytesMut};
 use std::str::Utf8Error;
@@ -106,6 +106,7 @@ pub fn parse(buf: &mut BytesMut) -> Result<Option<Parts>,ParseError> {
         version,
         headers,
         header_len,
+        extensions: Anymap::new(),
     }))
 }
 
