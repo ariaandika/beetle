@@ -31,7 +31,6 @@ pin_project_lite::pin_project! {
 
 pin_project_lite::pin_project! {
     #[project = PJ]
-    #[project_replace = PR]
     enum Phase<F> {
         P1 { #[pin] f: F },
         P2 { tcp: TcpListener },
@@ -50,7 +49,7 @@ where
 
         if let PJ::P1 { f } = me.phase.as_mut().project() {
             let ok = ready!(f.poll(cx)?);
-            me.phase.as_mut().project_replace(Phase::P2 { tcp: ok });
+            me.phase.set(Phase::P2 { tcp: ok });
         }
 
         let PJ::P2 { tcp } = me.phase.as_mut().project() else {
