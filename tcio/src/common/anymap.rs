@@ -27,3 +27,9 @@ impl Anymap {
     }
 }
 
+impl Default for Anymap {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+

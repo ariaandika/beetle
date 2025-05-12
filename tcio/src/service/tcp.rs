@@ -160,7 +160,7 @@ where
                 },
                 Write { body } => {
                     while res_buffer.has_remaining() {
-                        let read = io.try_write(&res_buffer)?;
+                        let read = io.try_write(res_buffer)?;
                         res_buffer.advance(read);
                     }
 
