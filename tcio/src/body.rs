@@ -63,7 +63,9 @@ impl Body {
 }
 
 impl Body {
-    pub fn collect(self) {}
+    pub fn collect(self) -> Collect {
+        Collect { body: self }
+    }
 
     pub(crate) fn poll_read(self: Pin<&mut Self>, cx: &mut Context) -> Poll<io::Result<()>> {
         if self.read_len >= self.content_len {
