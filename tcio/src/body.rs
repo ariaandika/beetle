@@ -1,61 +1,115 @@
 //! request and response body struct
 use bytes::{Bytes, BytesMut};
-use std::io;
-use crate::task::{StreamFuture, StreamHandle};
+use std::{
+    io,
+    pin::{Pin, pin},
+    sync::{Arc, Mutex},
+    task::{
+        Context,
+        Poll::{self, *},
+        ready,
+    },
+};
+use tokio::net::TcpStream;
 
 /// http request body
 //
-// this is public api, which user interact to
-#[derive(Default)]
+// lock based body reader
 pub struct Body {
-    chan: Option<BodyChan>
-}
-
-struct BodyChan {
+    shared: Arc<Mutex<TcpStream>>,
     content_len: usize,
+    read_len: usize,
     buffer: BytesMut,
-    stream: StreamHandle,
 }
 
 impl Body {
-    pub fn empty() -> Body {
-        Self { chan: None }
+    pub(crate) fn new(shared: Arc<Mutex<TcpStream>>, content_len: usize, buffer: BytesMut) -> Self {
+        Self {
+            shared,
+            content_len,
+            read_len: 0,
+            buffer,
+        }
     }
 
-    pub fn new(content_len: usize, buffer: BytesMut, stream: StreamHandle) -> Body {
-        Self { chan: Some(BodyChan { content_len, buffer, stream }) }
-    }
-
-    /// return content-length if any
+    /// return content-length
     ///
     /// chunked content is not yet supported
-    pub fn content_len(&self) -> Option<usize> {
-        self.chan.as_ref().map(|e|e.content_len)
+    pub fn content_len(&self) -> usize {
+        self.content_len
     }
 
-    /// consume body into [`BytesMut`]
-    pub fn bytes_mut(self) -> StreamFuture<BytesMut> {
-        let Some(BodyChan { stream, buffer, content_len, }) = self.chan else {
-            // should if content length is missing or invalid,
-            // an io error [`io::ErrorKind::InvalidData`] is returned ?
-            return StreamFuture::exact(BytesMut::new())
-        };
-        let read = buffer.len();
-        let read_left = content_len.saturating_sub(read);
-        if read_left == 0 {
-            return StreamFuture::exact(buffer)
+    // /// consume body into [`BytesMut`]
+    // pub fn bytes_mut(self) -> StreamFuture<BytesMut> {
+    //     let Some(BodyChan { stream, buffer, content_len, }) = self.chan else {
+    //         // should if content length is missing or invalid,
+    //         // an io error [`io::ErrorKind::InvalidData`] is returned ?
+    //         return StreamFuture::exact(BytesMut::new())
+    //     };
+    //     let read = buffer.len();
+    //     let read_left = content_len.saturating_sub(read);
+    //     if read_left == 0 {
+    //         return StreamFuture::exact(buffer)
+    //     }
+    //     stream.read_exact(read, read_left, buffer)
+    // }
+
+    // /// consume body into [`Bytes`]
+    // ///
+    // /// this is utility function that propagate [`Body::bytes_mut`]
+    // pub async fn bytes(self) -> io::Result<Bytes> {
+    //     Ok(self.bytes_mut().await?.freeze())
+    // }
+}
+
+impl Body {
+    pub fn collect(self) {
+        
+    }
+
+    pub(crate) fn poll_read(self: Pin<&mut Self>, cx: &mut Context) -> Poll<io::Result<()>> {
+        if self.read_len >= self.content_len {
+            return Ready(Err(io::Error::new(
+                io::ErrorKind::QuotaExceeded,
+                "content length reached",
+            )));
         }
-        stream.read_exact(read, read_left, buffer)
-    }
 
-    /// consume body into [`Bytes`]
-    ///
-    /// this is utility function that propagate [`Body::bytes_mut`]
-    pub async fn bytes(self) -> io::Result<Bytes> {
-        Ok(self.bytes_mut().await?.freeze())
+        let me = self.get_mut();
+        let lock = match me.shared.try_lock() {
+            Ok(ok) => ok,
+            Err(_) => {
+                return Ready(Err(io::Error::new(
+                    io::ErrorKind::ResourceBusy,
+                    "unable to lock for body read",
+                )));
+            }
+        };
+
+        ready!(pin!(lock.readable()).poll(cx)?);
+        let read = lock.try_read_buf(&mut me.buffer)?;
+
+        me.read_len += read;
+
+        Ready(Ok(()))
     }
 }
 
+pub struct Collect {
+    body: Body,
+}
+
+impl Future for Collect {
+    type Output = io::Result<BytesMut>;
+
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        let me = &mut self.get_mut().body;
+        while me.read_len < me.content_len {
+            ready!(Pin::new(&mut *me).poll_read(cx)?);
+        }
+        Ready(Ok(std::mem::take(&mut me.buffer)))
+    }
+}
 
 #[derive(Default)]
 pub enum ResBody {
@@ -111,7 +165,7 @@ impl From<Vec<u8>> for ResBody {
 
 impl From<String> for ResBody {
     fn from(value: String) -> Self {
-        Self::from(value.into_bytes())
+        Self::Bytes(value.into_bytes().into())
     }
 }
 
@@ -119,10 +173,7 @@ impl From<String> for ResBody {
 
 impl std::fmt::Debug for Body {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self.content_len() {
-            Some(len) => f.debug_tuple("Body").field(&len).finish(),
-            None => f.debug_tuple("Body").field(&"Empty").finish(),
-        }
+        f.debug_tuple("Body").field(&self.content_len).finish()
     }
 }
 
