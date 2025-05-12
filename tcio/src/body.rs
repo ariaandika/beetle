@@ -1,4 +1,4 @@
-//! request and response body struct
+//! Http Request and Response Body.
 use bytes::{Buf, BufMut, Bytes, BytesMut};
 use std::{
     io,
@@ -6,15 +6,13 @@ use std::{
     sync::Arc,
     task::{
         Context,
-        Poll::{self, *},
+        Poll::{self, Ready},
         ready,
     },
 };
 use tokio::net::TcpStream;
 
-/// http request body
-//
-// lock based body reader
+/// Http Request Body.
 pub struct Body {
     io: Arc<TcpStream>,
     content_len: usize,
@@ -32,41 +30,13 @@ impl Body {
         }
     }
 
-    /// return content-length
-    ///
-    /// chunked content is not yet supported
+    /// Returns `Content-length`.
     pub fn content_len(&self) -> usize {
         self.content_len
     }
-
-    // /// consume body into [`BytesMut`]
-    // pub fn bytes_mut(self) -> StreamFuture<BytesMut> {
-    //     let Some(BodyChan { stream, buffer, content_len, }) = self.chan else {
-    //         // should if content length is missing or invalid,
-    //         // an io error [`io::ErrorKind::InvalidData`] is returned ?
-    //         return StreamFuture::exact(BytesMut::new())
-    //     };
-    //     let read = buffer.len();
-    //     let read_left = content_len.saturating_sub(read);
-    //     if read_left == 0 {
-    //         return StreamFuture::exact(buffer)
-    //     }
-    //     stream.read_exact(read, read_left, buffer)
-    // }
-
-    // /// consume body into [`Bytes`]
-    // ///
-    // /// this is utility function that propagate [`Body::bytes_mut`]
-    // pub async fn bytes(self) -> io::Result<Bytes> {
-    //     Ok(self.bytes_mut().await?.freeze())
-    // }
 }
 
 impl Body {
-    pub fn collect(self) -> Collect {
-        Collect { body: self }
-    }
-
     pub(crate) fn poll_read(self: Pin<&mut Self>, cx: &mut Context) -> Poll<io::Result<()>> {
         if self.read_len >= self.content_len {
             return Ready(Err(io::Error::new(
@@ -91,8 +61,22 @@ impl Body {
 
         Ready(Ok(()))
     }
+
+    /// Read all body into [`BytesMut`].
+    ///
+    /// This equivalent to:
+    ///
+    /// ```ignore
+    /// async fn collect(self) -> std::io::Result<BytesMut>;
+    /// ```
+    pub fn collect(self) -> Collect {
+        Collect { body: self }
+    }
 }
 
+/// Futures returned from [`Body::collect`].
+#[derive(Debug)]
+#[must_use = "`Future` does nothing unless polled or .awaited"]
 pub struct Collect {
     body: Body,
 }
@@ -109,6 +93,12 @@ impl Future for Collect {
     }
 }
 
+impl std::fmt::Debug for Body {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_tuple("Body").field(&self.content_len).finish()
+    }
+}
+
 #[derive(Default)]
 pub enum ResBody {
     #[default]
@@ -117,7 +107,7 @@ pub enum ResBody {
 }
 
 impl ResBody {
-    /// return buffer length
+    /// Returns buffer length.
     pub fn len(&self) -> usize {
         match self {
             ResBody::Empty => 0,
@@ -125,7 +115,7 @@ impl ResBody {
         }
     }
 
-    /// return is buffer length empty
+    /// Returns `true` if buffer is empty.
     pub fn is_empty(&self) -> bool {
         match self {
             ResBody::Empty => true,
@@ -177,14 +167,6 @@ impl From<Vec<u8>> for ResBody {
 impl From<String> for ResBody {
     fn from(value: String) -> Self {
         Self::Bytes(value.into_bytes().into())
-    }
-}
-
-
-
-impl std::fmt::Debug for Body {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_tuple("Body").field(&self.content_len).finish()
     }
 }
 
