@@ -183,7 +183,7 @@ where
 
                     let headers = Headers::from_buffer(headers_map);
                     let parts = Parts::new(method, path, version, headers, <_>::default());
-                    let body = Body::new(io.clone(), content_len, body);
+                    let body = Body::new(io.clone(), content_len.unwrap_or_default(), body);
                     let request = Request::from_parts(parts,body);
 
                     let future = inner.call(request);

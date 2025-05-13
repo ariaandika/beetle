@@ -13,13 +13,13 @@ use tokio::net::TcpStream;
 /// Http Request Body.
 pub struct Body {
     io: Arc<TcpStream>,
-    content_len: Option<usize>,
+    content_len: usize,
     read_len: usize,
     buffer: BytesMut,
 }
 
 impl Body {
-    pub(crate) fn new(shared: Arc<TcpStream>, content_len: Option<usize>, buffer: BytesMut) -> Self {
+    pub(crate) fn new(shared: Arc<TcpStream>, content_len: usize, buffer: BytesMut) -> Self {
         Self {
             io: shared,
             content_len,
@@ -29,24 +29,17 @@ impl Body {
     }
 
     /// Returns `Content-length` if any.
-    pub fn content_len(&self) -> Option<usize> {
+    pub fn content_len(&self) -> usize {
         self.content_len
     }
 }
 
 impl Body {
     pub(crate) fn poll_read(self: Pin<&mut Self>, cx: &mut Context) -> Poll<io::Result<()>> {
-        let Some(content_len) = self.content_len else {
+        if self.read_len >= self.content_len {
             return Ready(Err(io::Error::new(
                 io::ErrorKind::QuotaExceeded,
-                "request contains no body",
-            )));
-        };
-
-        if self.read_len >= content_len {
-            return Ready(Err(io::Error::new(
-                io::ErrorKind::QuotaExceeded,
-                "content length reached",
+                "body exhausted",
             )));
         }
 
@@ -92,13 +85,10 @@ impl Future for Collect {
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let me = &mut self.get_mut().body;
 
-        let Some(content_len) = me.content_len else {
-            return Ready(Ok(BytesMut::new()));
-        };
-
-        while me.read_len < content_len {
+        while me.read_len < me.content_len {
             ready!(Pin::new(&mut *me).poll_read(cx)?);
         }
+
         Ready(Ok(std::mem::take(&mut me.buffer)))
     }
 }
