@@ -16,7 +16,7 @@ pub fn check(res: &mut Response) {
 pub fn write(parts: &Parts, bytes: &mut BytesMut) {
     bytes.put_slice(parts.version.as_str().as_bytes());
     bytes.put_slice(b" ");
-    bytes.put_slice(parts.status.as_bytes());
+    bytes.put_slice(parts.status.as_str().as_bytes());
     bytes.put_slice(b"\r\n");
     bytes.put_slice(&parts.headers);
     bytes.extend_from_slice(b"\r\n");

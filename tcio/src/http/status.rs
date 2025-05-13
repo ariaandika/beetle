@@ -8,6 +8,13 @@ use std::{
 #[derive(Clone, Copy)]
 pub struct StatusCode(NonZeroU16);
 
+impl StatusCode {
+    /// Returns status code value, e.g: `200`.
+    pub fn status(&self) -> u16 {
+        self.0.get()
+    }
+}
+
 impl Display for StatusCode {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         f.write_str(self.status_str())?;
@@ -28,81 +35,58 @@ impl Default for StatusCode {
     }
 }
 
-macro_rules! status_code_v2 {
-    (@msgs $($int:literal $msg:literal,)*) => {
+macro_rules! status_code_v3 {
+    (
+        $(
+            $int:literal $id:ident $msg:literal;
+        )*
+    ) => {
         impl StatusCode {
-            /// return status and reason, e.g: `"200 OK"`
-            pub fn as_bytes(&self) -> &'static [u8] {
+            /// Returns status code and message as string slice, e.g: `"200 OK"`.
+            pub const fn as_str(&self) -> &'static str {
                 match self.0.get() {
                     $(
-                        $int => concat!(stringify!($int)," ",$msg).as_bytes(),
+                        $int => concat!(stringify!($int)," ",$msg),
                     )*
-                    _ => unreachable!(),
+                    // SAFETY: StatusCode value is privately constructed and immutable
+                    _ => unsafe { std::hint::unreachable_unchecked() },
                 }
             }
 
-            /// return status code as str, e.g: `"200"`
-            pub fn status_str(&self) -> &'static str {
+            /// Returns status code as str, e.g: `"200"`.
+            pub const fn status_str(&self) -> &'static str {
                 match self.0.get() {
                     $(
                         $int => stringify!($int),
                     )*
-                    _ => unreachable!(),
+                    // SAFETY: StatusCode value is privately constructed and immutable
+                    _ => unsafe { std::hint::unreachable_unchecked() },
                 }
             }
 
-            /// return status message, e.g: `"OK"`
-            pub fn message(&self) -> &'static str {
+            /// Returns status message, e.g: `"OK"`.
+            pub const fn message(&self) -> &'static str {
                 match self.0.get() {
                     $(
                         $int => $msg,
                     )*
-                    _ => unreachable!(),
+                    // SAFETY: StatusCode value is privately constructed and immutable
+                    _ => unsafe { std::hint::unreachable_unchecked() },
                 }
             }
-        }
-    };
-    (@code $($int:literal $name:ident,)*) => {
-        impl StatusCode {
+
             $(
-                pub const $name: Self = Self(unsafe { NonZeroU16::new_unchecked($int) });
+                pub const $id: Self = Self(unsafe { NonZeroU16::new_unchecked($int) });
             )*
-        }
-    };
-
-    (@
-        (msg => $($msgs:tt)*)
-        (code => $($codes:tt)*)
-    ) => {
-        status_code_v2!(@code $($codes)*);
-        status_code_v2!(@msgs $($msgs)*);
-    };
-
-    (@
-        (msg => $($msgs:tt)*)
-        (code => $($codes:tt)*)
-        $int:literal $name:ident $msg:literal, $($tt:tt)*
-    ) => {
-        status_code_v2! {@
-            (msg => $($msgs)* $int $msg,)
-            (code => $($codes)* $int $name,)
-            $($tt)*
-        }
-    };
-
-    ($int:literal $($tt:tt)*) => {
-        status_code_v2! {@
-            (msg => )
-            (code => )
-            $int $($tt)*
         }
     };
 }
 
-status_code_v2! {
-    200 OK "OK",
-    400 BAD_REQUEST "Bad Request",
-    404 NOT_FOUND "Not Found",
-    405 METHOD_NOT_ALLOWED "Method Not Allowed",
+status_code_v3! {
+    200 OK "OK";
+    400 BAD_REQUEST "Bad Request";
+    404 NOT_FOUND "Not Found";
+    405 METHOD_NOT_ALLOWED "Method Not Allowed";
+    500 INTERNAL_SERVER_ERROR "Internal Server Error";
 }
 
