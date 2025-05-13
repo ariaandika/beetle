@@ -19,6 +19,7 @@ pub struct Body {
 
 enum BodyKind {
     Empty,
+    Exact(Bytes),
     Arc(ArcBody),
 }
 
@@ -26,6 +27,12 @@ impl Body {
     pub fn empty() -> Self {
         Self {
             kind: BodyKind::Empty,
+        }
+    }
+
+    pub fn exact(bytes: Bytes) -> Self {
+        Self {
+            kind: BodyKind::Exact(bytes),
         }
     }
 
@@ -40,10 +47,11 @@ impl Body {
         }
     }
 
-    /// Returns `Content-length`.
+    /// Returns body length.
     pub fn content_len(&self) -> usize {
         match &self.kind {
             BodyKind::Empty => 0,
+            BodyKind::Exact(b) => b.len(),
             BodyKind::Arc(b) => b.content_len,
         }
     }
@@ -103,11 +111,12 @@ pub struct Collect {
 }
 
 impl Future for Collect {
-    type Output = io::Result<BytesMut>;
+    type Output = io::Result<Bytes>;
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let body = match &mut self.body.kind {
-            BodyKind::Empty => return Ready(Ok(BytesMut::new())),
+            BodyKind::Empty => return Ready(Ok(<_>::default())),
+            BodyKind::Exact(b) => return Ready(Ok(std::mem::take(b))),
             BodyKind::Arc(ok) => ok,
         };
 
@@ -115,7 +124,7 @@ impl Future for Collect {
             ready!(Pin::new(&mut *body).poll_read(cx)?);
         }
 
-        Ready(Ok(std::mem::take(&mut body.buffer)))
+        Ready(Ok(std::mem::take(&mut body.buffer).freeze()))
     }
 }
 

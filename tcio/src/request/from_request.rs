@@ -1,4 +1,4 @@
-use bytes::{Bytes, BytesMut};
+use bytes::Bytes;
 use std::{
     convert::Infallible,
     future::{Ready, ready},
@@ -77,37 +77,30 @@ from_request! {
 }
 
 from_request! {
-    BytesMut,
+    Bytes,
     Error = BadRequest<io::Error>;
     Future = MapErr<Collect, fn(io::Error) -> BadRequest<io::Error>>;
     (req) => req.into_body().collect().map_err(BadRequest)
 }
 
 from_request! {
-    Bytes,
-    Error = BadRequest<io::Error>;
-    Future = MapOk<<BytesMut as FromRequest>::Future, fn(BytesMut) -> Bytes>;
-    (req) => BytesMut::from_request(req).map_ok(BytesMut::freeze as _)
-}
-
-from_request! {
     Vec<u8>,
     Error = BadRequest<io::Error>;
-    Future = MapOk<<BytesMut as FromRequest>::Future, fn(BytesMut) -> Vec<u8>>;
-    (req) => BytesMut::from_request(req).map_ok(Into::into as _)
+    Future = MapOk<<Bytes as FromRequest>::Future, fn(Bytes) -> Vec<u8>>;
+    (req) => Bytes::from_request(req).map_ok(Into::into as _)
 }
 
 from_request! {
     String,
     Error = BadRequest<BytesUtf8Error>;
     Future = Map<
-        <BytesMut as FromRequest>::Future,
-        fn(Result<BytesMut, BadRequest<io::Error>>) -> Result<String, BadRequest<BytesUtf8Error>>,
+        <Bytes as FromRequest>::Future,
+        fn(Result<Bytes, BadRequest<io::Error>>) -> Result<String, BadRequest<BytesUtf8Error>>,
     >;
-    (req) => BytesMut::from_request(req).map(map_to_string)
+    (req) => Bytes::from_request(req).map(map_to_string)
 }
 
-fn map_to_string(result: Result<BytesMut, BadRequest<io::Error>>) -> Result<String, BadRequest<BytesUtf8Error>> {
+fn map_to_string(result: Result<Bytes, BadRequest<io::Error>>) -> Result<String, BadRequest<BytesUtf8Error>> {
     String::from_utf8(result.map_err(BadRequest::map)?.into())
         .map_err(Into::<BytesUtf8Error>::into)
         .map_err(Into::into)
