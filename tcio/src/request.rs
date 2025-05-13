@@ -1,27 +1,44 @@
 //! http request
+use bytes::Bytes;
+
 use crate::{
     IntoResponse,
     body::Body,
     common::{Anymap, ByteStr},
-    http::{HEADER_SIZE, Header, Method, Version},
+    http::{Method, Version},
 };
 
 mod from_request;
 mod parser;
 
-pub use parser::{ParseError, parse};
+pub use parser::{HeaderParser, ParseError, parse_request_line};
 
 /// an http request parts
 pub struct Parts {
     method: Method,
     path: ByteStr,
     version: Version,
-    headers: [Header;HEADER_SIZE],
-    header_len: usize,
+    headers: Bytes,
     extensions: Anymap,
 }
 
 impl Parts {
+    pub(crate) fn new(
+        method: Method,
+        path: ByteStr,
+        version: Version,
+        headers: Bytes,
+        extensions: Anymap,
+    ) -> Self {
+        Self {
+            method,
+            path,
+            version,
+            headers,
+            extensions,
+        }
+    }
+
     /// getter for http method
     pub fn method(&self) -> Method {
         self.method
@@ -37,10 +54,10 @@ impl Parts {
         self.version
     }
 
-    /// getter for http headers
-    pub fn headers(&self) -> &[Header] {
-        &self.headers[..self.header_len]
-    }
+    // /// getter for http headers
+    // pub fn headers(&self) -> &[Header] {
+    //     &self.headers[..self.header_len]
+    // }
 
     pub fn extensions(&self) -> &Anymap {
         &self.extensions
@@ -99,11 +116,6 @@ impl Request {
     pub fn version(&self) -> Version {
         self.parts.version
     }
-
-    /// getter for http headers
-    pub fn headers(&self) -> &[Header] {
-        self.parts.headers()
-    }
 }
 
 /// a type that can be constructed from request
@@ -130,7 +142,7 @@ impl std::fmt::Debug for Parts {
             .field("method", &self.method)
             .field("path", &self.path)
             .field("version", &self.version)
-            .field("headers", &self.headers())
+            // .field("headers", &self.headers())
             .finish()
     }
 }
@@ -141,7 +153,7 @@ impl std::fmt::Debug for Request {
             .field("method", &self.parts.method)
             .field("path", &self.parts.path)
             .field("version", &self.parts.version)
-            .field("headers", &self.parts.headers())
+            // .field("headers", &self.parts.headers())
             .finish()
     }
 }

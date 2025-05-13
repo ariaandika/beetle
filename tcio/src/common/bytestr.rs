@@ -20,6 +20,15 @@ impl ByteStr {
         Ok(Self { bytes })
     }
 
+    /// Converts a [`Bytes`] to a [`ByteStr`] without checking that the string contains valid UTF-8.
+    ///
+    /// # Safety
+    ///
+    /// The bytes passed in must be valid UTF-8.
+    pub unsafe fn from_utf8_unchecked(bytes: Bytes) -> Self {
+        Self { bytes }
+    }
+
     /// Creates [`ByteStr`] instance from str slice, by copying it.
     pub fn copy_from_str(string: &str) -> Self {
         Self { bytes: Bytes::copy_from_slice(string.as_bytes()) }

@@ -2,12 +2,10 @@
 use bytes::{Buf, BufMut, Bytes, BytesMut};
 use std::{
     io,
-    pin::{Pin, pin},
+    pin::{pin, Pin},
     sync::Arc,
     task::{
-        Context,
-        Poll::{self, Ready},
-        ready,
+        ready, Context, Poll::{self, Ready}
     },
 };
 use tokio::net::TcpStream;
@@ -15,13 +13,13 @@ use tokio::net::TcpStream;
 /// Http Request Body.
 pub struct Body {
     io: Arc<TcpStream>,
-    content_len: usize,
+    content_len: Option<usize>,
     read_len: usize,
     buffer: BytesMut,
 }
 
 impl Body {
-    pub(crate) fn new(shared: Arc<TcpStream>, content_len: usize, buffer: BytesMut) -> Self {
+    pub(crate) fn new(shared: Arc<TcpStream>, content_len: Option<usize>, buffer: BytesMut) -> Self {
         Self {
             io: shared,
             content_len,
@@ -30,15 +28,22 @@ impl Body {
         }
     }
 
-    /// Returns `Content-length`.
-    pub fn content_len(&self) -> usize {
+    /// Returns `Content-length` if any.
+    pub fn content_len(&self) -> Option<usize> {
         self.content_len
     }
 }
 
 impl Body {
     pub(crate) fn poll_read(self: Pin<&mut Self>, cx: &mut Context) -> Poll<io::Result<()>> {
-        if self.read_len >= self.content_len {
+        let Some(content_len) = self.content_len else {
+            return Ready(Err(io::Error::new(
+                io::ErrorKind::QuotaExceeded,
+                "request contains no body",
+            )));
+        };
+
+        if self.read_len >= content_len {
             return Ready(Err(io::Error::new(
                 io::ErrorKind::QuotaExceeded,
                 "content length reached",
@@ -86,7 +91,12 @@ impl Future for Collect {
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let me = &mut self.get_mut().body;
-        while me.read_len < me.content_len {
+
+        let Some(content_len) = me.content_len else {
+            return Ready(Ok(BytesMut::new()));
+        };
+
+        while me.read_len < content_len {
             ready!(Pin::new(&mut *me).poll_read(cx)?);
         }
         Ready(Ok(std::mem::take(&mut me.buffer)))

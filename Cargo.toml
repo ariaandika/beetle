@@ -1,3 +1,4 @@
 [workspace]
-members = ["tcio"]
+members = [ "example","tcio"]
+default-members = ["tcio"]
 resolver = "2"

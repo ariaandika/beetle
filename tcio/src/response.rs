@@ -1,19 +1,21 @@
 //! http response
-use crate::body::ResBody;
-use crate::http::{Header, StatusCode, Version, HEADER_SIZE};
+use bytes::{BufMut, BytesMut};
 
-pub use writer::{check, write};
+use crate::body::ResBody;
+use crate::http::{StatusCode, Version};
 
 mod into_response;
 mod writer;
+
+pub use writer::{check, write};
 
 /// an http response parts
 #[derive(Default)]
 pub struct Parts {
     version: Version,
     status: StatusCode,
-    headers: [Header;HEADER_SIZE],
-    header_len: usize,
+    headers: BytesMut,
+    // header_len: usize,
 }
 
 impl Parts {
@@ -27,18 +29,22 @@ impl Parts {
         self.status
     }
 
-    /// getter for http headers
-    pub fn headers(&self) -> &[Header] {
-        &self.headers[..self.header_len]
-    }
+    // /// getter for http headers
+    // pub fn headers(&self) -> &[Header] {
+    //     &self.headers[..self.header_len]
+    // }
 
     /// insert new header
-    pub fn insert_header(&mut self, header: Header) {
-        if self.header_len >= HEADER_SIZE {
-            return;
-        }
-        self.headers[self.header_len] = header;
-        self.header_len += 1;
+    pub fn insert_header(&mut self, key: &[u8], value: &[u8]) {
+        self.headers.put(key);
+        self.headers.put(&b": "[..]);
+        self.headers.put(value);
+        self.headers.put(&b"\r\n"[..]);
+        // if self.header_len >= HEADER_SIZE {
+        //     return;
+        // }
+        // self.headers[self.header_len] = header;
+        // self.header_len += 1;
     }
 }
 
@@ -91,10 +97,10 @@ impl Response {
         self.parts.status
     }
 
-    /// getter for http headers
-    pub fn headers(&self) -> &[Header] {
-        self.parts.headers()
-    }
+    // /// getter for http headers
+    // pub fn headers(&self) -> &[Header] {
+    //     self.parts.headers()
+    // }
 }
 
 /// a type that can be converted into response
@@ -116,7 +122,7 @@ impl std::fmt::Debug for Parts {
         f.debug_struct("Parts")
             .field("version", &self.version)
             .field("status", &self.status)
-            .field("headers", &self.headers())
+            // .field("headers", &self.headers())
             .finish()
     }
 }
@@ -126,7 +132,7 @@ impl std::fmt::Debug for Response {
         f.debug_struct("Response")
             .field("version", &self.parts.version)
             .field("status", &self.parts.status)
-            .field("headers", &self.parts.headers())
+            // .field("headers", &self.parts.headers())
             .finish()
     }
 }

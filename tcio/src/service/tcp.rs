@@ -1,13 +1,10 @@
 use bytes::{Buf, BufMut, BytesMut};
 use std::{
     io,
-    pin::{Pin, pin},
-    str::from_utf8,
+    pin::Pin,
     sync::Arc,
     task::{
-        Context,
-        Poll::{self, *},
-        ready,
+        ready, Context, Poll::{self, Ready}
     },
 };
 use tokio::net::TcpStream;
@@ -16,10 +13,19 @@ use super::HttpService;
 use crate::{
     ResBody,
     body::Body,
-    request::{self, Request},
+    common::{Anymap, ByteStr},
+    request::{self, Parts, Request},
     response::{self, IntoResponse},
     service::Service,
 };
+
+fn to_io<E: std::error::Error + Send + Sync + 'static>(err: E) -> io::Error {
+    io::Error::new(io::ErrorKind::InvalidData, err)
+}
+
+fn parse_int(val: &[u8]) -> Result<usize, io::Error> {
+    std::str::from_utf8(val).map_err(to_io)?.parse().map_err(to_io)
+}
 
 #[derive(Debug, Clone)]
 pub struct TcpService<S> {
@@ -99,7 +105,6 @@ where
         loop {
             match state.as_mut().project() {
                 IoReady => {
-                    ready!(pin!(io.readable()).poll(cx)?);
                     let read = {
                         let buf = buffer.chunk_mut();
                         let buf = unsafe {
@@ -114,35 +119,58 @@ where
                     state.set(TcpState::Parse);
                 }
                 Parse => {
-                    let parts = match request::parse(buffer) {
-                        Ok(Some(ok)) => ok,
-                        Ok(None) => {
-                            #[cfg(feature = "log")]
-                            log::debug!("buffer should be unique to reclaim: {:?}",buffer.try_reclaim(1024));
-                            state.set(TcpState::IoReady);
-                            continue;
-                        },
-                        Err(err) => return Ready(Err(io::Error::new(
-                            io::ErrorKind::InvalidData,
-                            err,
-                        )))
+                    let Some((method, path, version, header_offset)) = request::parse_request_line(buffer)? else {
+                        let _ = buffer.try_reclaim(1024);
+                        state.set(TcpState::IoReady);
+                        continue;
                     };
 
-                    let content_len = parts
-                        .headers()
-                        .iter()
-                        .find_map(|header| (header.name == "content-length").then_some(header.value.as_ref()))
-                        .and_then(|e| from_utf8(e).ok()?.parse().ok());
+                    let headers = &buffer[header_offset..];
 
-                    let Some(len) = content_len else {
-                        return Ready(Err(io::Error::new(
-                            io::ErrorKind::InvalidData,
-                            "error: no content length header",
-                        )));
+                    let mut parser = request::HeaderParser::new(headers);
+                    let mut content_len = None;
+
+                    for result in &mut parser {
+                        let (key,val) = result;
+
+                        if key.eq_ignore_ascii_case(b"content-length") {
+                            content_len = Some(parse_int(val)?);
+                        }
+                    }
+
+                    if !parser.complete() {
+                        let _ = buffer.try_reclaim(1024);
+                        state.set(TcpState::IoReady);
+                        continue;
+                    }
+
+                    let body_offset = parser.offset();
+
+                    let path_ptr = (path.as_ptr(), path.len());
+                    let request_line = buffer.split_to(header_offset).freeze();
+
+                    // `buffer` now contains [header..,body..]
+
+                    // SAFETY: `buffer.split_to` will not move pointer and path was a `str`
+                    let path = unsafe {
+                        let path = std::slice::from_raw_parts(path_ptr.0, path_ptr.1);
+                        ByteStr::from_utf8_unchecked(request_line.slice_ref(path))
                     };
 
-                    let body = Body::new(io.clone(), len, buffer.split());
+                    // `body_offset` is offset started from `header_offset`
+                    // and now `buffer` is already started from `header_offset`
+                    let headers = buffer.split_to(body_offset).freeze();
+
+                    // `buffer` now contains [body..]
+
+                    let body = buffer.split();
+
+                    // `buffer` now empty
+
+                    let parts = Parts::new(method, path, version, headers, Anymap::new());
+                    let body = Body::new(io.clone(), content_len, body);
                     let request = Request::from_parts(parts,body);
+
                     let future = inner.call(request);
                     state.set(TcpState::Inner { future });
                 }
@@ -166,6 +194,8 @@ where
 
                     ready!(body.as_mut().unwrap().poll_write_all_tcp(cx, io)?);
 
+                    #[cfg(feature = "log")]
+                    log::trace!("request complete");
                     state.set(TcpState::Cleanup);
                 },
                 Cleanup => {
@@ -189,28 +219,33 @@ where
         }
     }
 
-    fn into_poll_ready(mut self: Pin<&mut Self>) -> Pin<&mut Self> {
+    fn into_poll_ready(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<io::Result<()>> {
         use TcpStateProject::*;
 
         let me = self.as_mut().project();
         let mut state = me.state;
 
         match state.as_mut().project() {
-            IoReady => state.set(TcpState::IoReady),
-            Parse => state.set(TcpState::IoReady),
-            Inner { .. } => state.set(TcpState::IoReady),
+            IoReady | Parse | Inner { .. } | Cleanup => {
+                #[cfg(feature = "log")]
+                log::trace!("would block on read");
+                return self.as_mut().project().io.poll_read_ready(cx);
+            },
             WriteReady { body } => {
+                #[cfg(feature = "log")]
+                log::trace!("would block on write");
                 let body = body.take();
                 state.set(TcpState::WriteReady { body })
             },
             Write { body } => {
+                #[cfg(feature = "log")]
+                log::trace!("would block on write");
                 let body = body.take();
                 state.set(TcpState::WriteReady { body })
             },
-            Cleanup => state.set(TcpState::IoReady),
         }
 
-        self
+        Ready(Ok(()))
     }
 }
 
@@ -231,14 +266,18 @@ where
                 Ready(Ok(()))
             },
             Err(err) if err.kind() == io::ErrorKind::WouldBlock => {
-                #[cfg(feature = "log")]
-                log::trace!("would block");
-                self.into_poll_ready().poll(cx)
+                let result = ready!(self.as_mut().into_poll_ready(cx));
+                if let Err(_err) = result {
+                    #[cfg(feature = "log")]
+                    log::error!("{_err}");
+                    return Ready(Err(()))
+                };
+                self.poll(cx)
             },
             Err(err) if err.kind() == io::ErrorKind::Interrupted => {
                 #[cfg(feature = "log")]
                 log::trace!("interrupted");
-                self.into_poll_ready().poll(cx)
+                self.poll(cx)
             },
             Err(_err) => {
                 #[cfg(feature = "log")]

@@ -1,44 +1,38 @@
-use super::Parts;
-use crate::common::{Anymap, ByteStr};
-use crate::http::{Header, Method, Version, HEADER_SIZE};
-use bytes::{Buf, BytesMut};
-use std::str::Utf8Error;
+use memchr::memmem::{self, find_iter, FindIter, Finder};
+use std::{
+    io,
+    str::{Utf8Error, from_utf8},
+};
 
-/// parse http request
-///
-/// return `Ok(None)` when buffer end before parse complete
-pub fn parse(buf: &mut BytesMut) -> Result<Option<Parts>,ParseError> {
-    macro_rules! try_advance {
-        ($n:literal) => {
-            match buf.len() >= $n {
-                true => buf.advance($n),
-                false => return Ok(None),
-            }
-        };
-    }
+use crate::http::{Method, Version};
 
-    macro_rules! collect_word {
-        () => {
-            collect_word!(is_ascii_whitespace())
-        };
-        ($($tt:tt)*) => {{
-            let mut i = 0;
+/// Returns (method, path, version, header offset)
+pub fn parse_request_line(
+    buf: &[u8],
+) -> Result<Option<(Method, &str, Version, usize)>, ParseError> {
+    let mut offset = 0;
+
+    macro_rules! collect_until {
+        ($e:ident => $b:expr) => {{
+            let start = offset;
             loop {
-                if match buf.get(i) {
-                    Some(some) => some.$($tt)*,
+                match buf.get(offset) {
+                    Some($e) if $b => {
+                        break &buf[start..offset];
+                    }
+                    Some(_) => {
+                        offset += 1;
+                    }
                     None => return Ok(None),
-                } {
-                    break buf.split_to(i);
                 }
-                i += 1;
             }
         }};
     }
 
     // NOTE: method
 
-    let method = collect_word!();
-    let method = match &method[..] {
+    let method = collect_until!(e => e.is_ascii_whitespace());
+    let method = match method {
         b"GET" | b"get" => Method::GET,
         b"POST" | b"post" => Method::POST,
         b"PUT" | b"put" => Method::PUT,
@@ -46,73 +40,98 @@ pub fn parse(buf: &mut BytesMut) -> Result<Option<Parts>,ParseError> {
         b"DELETE" | b"delete" => Method::DELETE,
         b"HEAD" | b"head" => Method::HEAD,
         b"CONNECT" | b"connect" => Method::CONNECT,
-        _ => return Err(format!("invalid method: {method:?}").into())
+        _ => return Err(format!("unknown method: {method:?}").into()),
     };
 
-    log::trace!("parsed method {method:?}");
+    collect_until!(e => !e.is_ascii_whitespace());
 
-    // wh
-    try_advance!(1);
+    // NOTE: path
 
-    let path = collect_word!();
-    let path = ByteStr::from_bytes(path.freeze())?;
+    let path = collect_until!(e => e.is_ascii_whitespace());
+    let path = from_utf8(path)?;
 
-    log::trace!("parsed path {path:?}");
+    collect_until!(e => !e.is_ascii_whitespace());
 
-    // wh
-    try_advance!(1);
+    // NOTE: version
 
-    let version = collect_word!();
-    let version = match &version[..] {
+    let version = collect_until!(e => e.is_ascii_whitespace());
+    let version = match version {
         b"HTTP/1.0" => Version::V10,
         b"HTTP/1.1" => Version::V11,
         b"HTTP/2" => Version::V2,
-        _ => return Err(format!("invalid version: {version:?}").into()),
+        _ => return Err(format!("unknown http version: {version:?}").into()),
     };
 
-    try_advance!(2);
-
-    log::trace!("parsed version {version:?}");
-
-    // headers
-    let mut headers = [const { Header::new_static() };HEADER_SIZE];
-    let mut header_len = 0;
-    loop {
-        if header_len >= HEADER_SIZE { break; }
-
-        if matches!((buf.first(),buf.get(1)),(Some(b'\r'),Some(&b'\n'))) {
-            buf.advance(2);
-            break;
-        }
-
-        let mut name = collect_word!(eq(&b':'));
-        name.make_ascii_lowercase();
-        let name = ByteStr::from_bytes(name.freeze())?;
-
-        try_advance!(2);
-
-        let value = collect_word!().freeze();
-
-        headers[header_len] = Header { name, value };
-        header_len += 1;
-
-        try_advance!(2);
-        log::trace!("parsed header {:?}",&headers[header_len-1]);
+    match memmem::find(&buf[offset..], b"\r\n") {
+        Some(ok) => Ok(Some((method, path, version, offset + ok + b"\r\n".len()))),
+        None => Ok(None),
     }
-
-    Ok(Some(Parts {
-        method,
-        path,
-        version,
-        headers,
-        header_len,
-        extensions: Anymap::new(),
-    }))
 }
 
-/// error maybe return from [`parse`]
+pub struct HeaderParser<'a> {
+    buf: &'a [u8],
+    offset: usize,
+    complete: bool,
+    colsp: Finder<'static>,
+    iter: FindIter<'a, 'static>,
+}
+
+impl<'a> HeaderParser<'a> {
+    pub fn new(buf: &'a [u8]) -> Self {
+        Self {
+            buf,
+            offset: 0,
+            complete: false,
+            colsp: Finder::new(b": "),
+            iter: find_iter(buf, b"\r\n")
+        }
+    }
+
+    pub fn offset(&self) -> usize {
+        self.offset
+    }
+
+    pub fn complete(&self) -> bool {
+        self.complete
+    }
+}
+
+impl<'a> Iterator for HeaderParser<'a> {
+    type Item = (&'a [u8], &'a [u8]);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.complete {
+            return None;
+        }
+
+        let cr = self.iter.next()?;
+        let kv = self.buf.get(self.offset..cr)?;
+
+        if kv.is_empty() {
+            self.complete = true;
+            return None;
+        }
+
+        let colsp = self.colsp.find(kv)?;
+
+        let key = kv.get(..colsp)?;
+        let val = kv.get(colsp + 1..)?;
+
+        self.offset = cr + 2;
+
+        Some((key, val))
+    }
+}
+
+/// Error that may returned from [`parse`].
 #[derive(Debug)]
 pub struct ParseError(String);
+
+impl From<ParseError> for io::Error {
+    fn from(value: ParseError) -> Self {
+        io::Error::new(io::ErrorKind::InvalidData, value)
+    }
+}
 
 impl From<String> for ParseError {
     fn from(value: String) -> Self {
@@ -130,7 +149,8 @@ impl std::error::Error for ParseError {}
 
 impl std::fmt::Display for ParseError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        String::fmt(&self.0, f)
+        f.write_str("failed to parse http, ")?;
+        f.write_str(&self.0)
     }
 }
 

@@ -116,7 +116,7 @@
 //! it needed to perform the bussiness logic, abstracting away all the parsing, validation, and
 //! error handling.
 //!
-//! [`ByteStr`]: crate::bytestr::ByteStr
+//! [`ByteStr`]: crate::common::ByteStr
 //! [`Bytes`]: bytes::Bytes
 //! [`BytesMut`]: bytes::BytesMut
 //! [`Method`]: crate::http::Method
