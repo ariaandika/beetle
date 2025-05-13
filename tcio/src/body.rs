@@ -2,64 +2,54 @@
 use bytes::{Buf, BufMut, Bytes, BytesMut};
 use std::{
     io,
-    pin::{pin, Pin},
+    pin::{Pin, pin},
     sync::Arc,
     task::{
-        ready, Context, Poll::{self, Ready}
+        Context,
+        Poll::{self, Ready},
+        ready,
     },
 };
 use tokio::net::TcpStream;
 
 /// Http Request Body.
 pub struct Body {
-    io: Arc<TcpStream>,
-    content_len: usize,
-    read_len: usize,
-    buffer: BytesMut,
+    kind: BodyKind
+}
+
+enum BodyKind {
+    Empty,
+    Arc(ArcBody),
 }
 
 impl Body {
+    pub fn empty() -> Self {
+        Self {
+            kind: BodyKind::Empty,
+        }
+    }
+
     pub(crate) fn new(shared: Arc<TcpStream>, content_len: usize, buffer: BytesMut) -> Self {
         Self {
-            io: shared,
-            content_len,
-            read_len: 0,
-            buffer,
+            kind: BodyKind::Arc(ArcBody {
+                io: shared,
+                content_len,
+                read_len: 0,
+                buffer,
+            }),
         }
     }
 
-    /// Returns `Content-length` if any.
+    /// Returns `Content-length`.
     pub fn content_len(&self) -> usize {
-        self.content_len
+        match &self.kind {
+            BodyKind::Empty => 0,
+            BodyKind::Arc(b) => b.content_len,
+        }
     }
 }
 
 impl Body {
-    pub(crate) fn poll_read(self: Pin<&mut Self>, cx: &mut Context) -> Poll<io::Result<()>> {
-        if self.read_len >= self.content_len {
-            return Ready(Err(io::Error::new(
-                io::ErrorKind::QuotaExceeded,
-                "body exhausted",
-            )));
-        }
-
-        let me = self.get_mut();
-        ready!(pin!(me.io.readable()).poll(cx)?);
-
-        let read = {
-            let buf = me.buffer.chunk_mut();
-            let buf = unsafe {
-                &mut *(buf.as_uninit_slice_mut() as *mut [std::mem::MaybeUninit<u8>] as *mut [u8])
-            };
-            me.io.try_read(buf)?
-        };
-        unsafe { me.buffer.advance_mut(read) };
-
-        me.read_len += read;
-
-        Ready(Ok(()))
-    }
-
     /// Read all body into [`BytesMut`].
     ///
     /// This equivalent to:
@@ -69,6 +59,39 @@ impl Body {
     /// ```
     pub fn collect(self) -> Collect {
         Collect { body: self }
+    }
+}
+
+struct ArcBody {
+    io: Arc<TcpStream>,
+    content_len: usize,
+    read_len: usize,
+    buffer: BytesMut,
+}
+
+impl ArcBody {
+    pub(crate) fn poll_read(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<io::Result<()>> {
+        if self.read_len >= self.content_len {
+            return Ready(Err(io::Error::new(
+                io::ErrorKind::QuotaExceeded,
+                "body exhausted",
+            )));
+        }
+
+        ready!(pin!(self.io.readable()).poll(cx)?);
+
+        let read = {
+            let buf = self.buffer.chunk_mut();
+            let buf = unsafe {
+                &mut *(buf.as_uninit_slice_mut() as *mut [std::mem::MaybeUninit<u8>] as *mut [u8])
+            };
+            self.io.try_read(buf)?
+        };
+        unsafe { self.buffer.advance_mut(read) };
+
+        self.read_len += read;
+
+        Ready(Ok(()))
     }
 }
 
@@ -82,22 +105,28 @@ pub struct Collect {
 impl Future for Collect {
     type Output = io::Result<BytesMut>;
 
-    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        let me = &mut self.get_mut().body;
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        let body = match &mut self.body.kind {
+            BodyKind::Empty => return Ready(Ok(BytesMut::new())),
+            BodyKind::Arc(ok) => ok,
+        };
 
-        while me.read_len < me.content_len {
-            ready!(Pin::new(&mut *me).poll_read(cx)?);
+        while body.read_len < body.content_len {
+            ready!(Pin::new(&mut *body).poll_read(cx)?);
         }
 
-        Ready(Ok(std::mem::take(&mut me.buffer)))
+        Ready(Ok(std::mem::take(&mut body.buffer)))
     }
 }
 
 impl std::fmt::Debug for Body {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_tuple("Body").field(&self.content_len).finish()
+        f.debug_tuple("Body").field(&self.content_len()).finish()
     }
 }
+
+
+// ===== Response Body =====
 
 #[derive(Default)]
 pub enum ResBody {
