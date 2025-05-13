@@ -34,7 +34,7 @@ from_parts! {
     Method,
     Error = Infallible;
     Future = Ready<Result<Self,Infallible>>;
-    (parts) => ready(Ok(parts.method))
+    (parts) => ready(Ok(parts.method()))
 }
 
 macro_rules! from_request {
