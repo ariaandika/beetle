@@ -3,7 +3,9 @@
 //! Tsue is a lightweight http server library.
 pub mod docs;
 
-mod common;
+pub mod common;
+mod ext;
+
 pub mod http;
 pub mod request;
 pub mod response;
