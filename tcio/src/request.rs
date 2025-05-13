@@ -7,10 +7,8 @@ use crate::{
 };
 
 mod from_request;
-mod parser;
 mod parts;
 
-pub use parser::{HeaderParser, ParseError, parse_request_line};
 pub use parts::Parts;
 
 /// an http request
