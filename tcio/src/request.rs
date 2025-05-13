@@ -4,8 +4,8 @@ use bytes::Bytes;
 use crate::{
     IntoResponse,
     body::Body,
-    common::{Anymap, ByteStr},
-    http::{Method, Version},
+    common::ByteStr,
+    http::{Extensions, Method, Version},
 };
 
 mod from_request;
@@ -19,7 +19,7 @@ pub struct Parts {
     path: ByteStr,
     version: Version,
     headers: Bytes,
-    extensions: Anymap,
+    extensions: Extensions,
 }
 
 impl Parts {
@@ -28,7 +28,7 @@ impl Parts {
         path: ByteStr,
         version: Version,
         headers: Bytes,
-        extensions: Anymap,
+        extensions: Extensions,
     ) -> Self {
         Self {
             method,
@@ -59,11 +59,11 @@ impl Parts {
     //     &self.headers[..self.header_len]
     // }
 
-    pub fn extensions(&self) -> &Anymap {
+    pub fn extensions(&self) -> &Extensions {
         &self.extensions
     }
 
-    pub fn extensions_mut(&mut self) -> &mut Anymap {
+    pub fn extensions_mut(&mut self) -> &mut Extensions {
         &mut self.extensions
     }
 }
@@ -95,7 +95,11 @@ impl Request {
         self.body
     }
 
-    pub fn extensions_mut(&mut self) -> &mut Anymap {
+    pub fn extensions(&self) -> &Extensions {
+        &self.parts.extensions
+    }
+
+    pub fn extensions_mut(&mut self) -> &mut Extensions {
         &mut self.parts.extensions
     }
 }

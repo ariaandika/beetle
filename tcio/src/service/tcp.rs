@@ -4,7 +4,9 @@ use std::{
     pin::Pin,
     sync::Arc,
     task::{
-        ready, Context, Poll::{self, Ready}
+        Context,
+        Poll::{self, Ready},
+        ready,
     },
 };
 use tokio::net::TcpStream;
@@ -13,7 +15,7 @@ use super::HttpService;
 use crate::{
     ResBody,
     body::Body,
-    common::{Anymap, ByteStr},
+    common::ByteStr,
     request::{self, Parts, Request},
     response::{self, IntoResponse},
     service::Service,
@@ -167,7 +169,7 @@ where
 
                     // `buffer` now empty
 
-                    let parts = Parts::new(method, path, version, headers, Anymap::new());
+                    let parts = Parts::new(method, path, version, headers, <_>::default());
                     let body = Body::new(io.clone(), content_len, body);
                     let request = Request::from_parts(parts,body);
 
