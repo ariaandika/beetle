@@ -27,34 +27,6 @@ pub trait FutureExt: Future {
         MapInfallible { inner: self }
     }
 
-    /// map future output into `Result<T,Infallible>`
-    fn and_then_or<M,L,R>(self, mapper: M) -> AndThenOr<Self,M,L>
-    where
-        M: FnOnce(Self::Output) -> Result<L,R>,
-        L: Future<Output = R>,
-        Self: Sized,
-    {
-        AndThenOr::First { f: self, mapper: Some(mapper) }
-    }
-
-    /// convert future into `Either` as the left variant
-    fn left<R>(self) -> EitherFuture<Self,R>
-    where
-        R: Future,
-        Self: Sized,
-    {
-        EitherFuture::Left { left: self }
-    }
-
-    /// convert future into `Either` as the right variant
-    fn right<L>(self) -> EitherFuture<L,Self>
-    where
-        L: Future,
-        Self: Sized,
-    {
-        EitherFuture::Right { right: self }
-    }
-
     /// convert future into `Either` as the left variant
     /// where the output implement the same `Into`
     fn left_into<R,O>(self) -> EitherInto<Self,R,O>
