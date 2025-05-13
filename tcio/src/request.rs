@@ -6,10 +6,33 @@ use crate::{
     http::{Extensions, Method, Version},
 };
 
-mod from_request;
 mod parts;
 
+pub mod futures;
+
 pub use parts::Parts;
+
+/// a type that can be constructed from request
+///
+/// this trait is used as request handler parameters
+pub trait FromRequest: Sized {
+    type Error: IntoResponse;
+
+    type Future: Future<Output = Result<Self, Self::Error>>;
+
+    fn from_request(req: Request) -> Self::Future;
+}
+
+/// a type that can be constructed from request parts
+///
+/// this trait is used as request handler parameters
+pub trait FromRequestParts: Sized {
+    type Error: IntoResponse;
+
+    type Future: Future<Output = Result<Self, Self::Error>>;
+
+    fn from_request_parts(parts: &mut Parts) -> Self::Future;
+}
 
 /// an http request
 pub struct Request {
@@ -65,35 +88,13 @@ impl Request {
     }
 }
 
-/// a type that can be constructed from request
-///
-/// this trait is used as request handler parameters
-pub trait FromRequest: Sized {
-    type Error: IntoResponse;
-
-    type Future: Future<Output = Result<Self, Self::Error>>;
-
-    fn from_request(req: Request) -> Self::Future;
-}
-
-/// a type that can be constructed from request parts
-///
-/// this trait is used as request handler parameters
-pub trait FromRequestParts: Sized {
-    type Error: IntoResponse;
-
-    type Future: Future<Output = Result<Self, Self::Error>>;
-
-    fn from_request_parts(parts: &mut Parts) -> Self::Future;
-}
-
 impl std::fmt::Debug for Request {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Request")
             .field("method", &self.parts.method())
             .field("path", &self.parts.path())
             .field("version", &self.parts.version())
-            // .field("headers", &self.parts.headers())
+            .field("headers", &self.parts.headers())
             .finish()
     }
 }

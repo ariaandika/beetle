@@ -1,3 +1,4 @@
+//! Futures and errors returned from foreign type impl of [`FromRequest`].
 use bytes::Bytes;
 use std::{
     convert::Infallible,
