@@ -6,12 +6,12 @@ use crate::{
     http::{Extensions, Method, Version},
 };
 
-mod parts;
 mod from_request;
 mod parser;
+mod parts;
 
-pub use parts::Parts;
 pub use parser::{HeaderParser, ParseError, parse_request_line};
+pub use parts::Parts;
 
 /// an http request
 pub struct Request {

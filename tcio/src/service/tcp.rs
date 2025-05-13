@@ -1,4 +1,4 @@
-use bytes::{Buf, BufMut, BytesMut};
+use bytes::{Buf, BufMut, Bytes, BytesMut};
 use std::{
     io,
     pin::Pin,
@@ -16,6 +16,7 @@ use crate::{
     ResBody,
     body::Body,
     common::ByteStr,
+    http::{Header, Headers},
     request::{self, Parts, Request},
     response::{self, IntoResponse},
     service::Service,
@@ -25,8 +26,12 @@ fn to_io<E: std::error::Error + Send + Sync + 'static>(err: E) -> io::Error {
     io::Error::new(io::ErrorKind::InvalidData, err)
 }
 
+fn parse_str(val: &[u8]) -> Result<&str, io::Error> {
+    std::str::from_utf8(val).map_err(to_io)
+}
+
 fn parse_int(val: &[u8]) -> Result<usize, io::Error> {
-    std::str::from_utf8(val).map_err(to_io)?.parse().map_err(to_io)
+    parse_str(val)?.parse().map_err(to_io)
 }
 
 #[derive(Debug, Clone)]
@@ -130,6 +135,7 @@ where
                     let headers = &buffer[header_offset..];
 
                     let mut parser = request::HeaderParser::new(headers);
+                    let mut headers_map = Vec::with_capacity(8);
                     let mut content_len = None;
 
                     for result in &mut parser {
@@ -138,6 +144,12 @@ where
                         if key.eq_ignore_ascii_case(b"content-length") {
                             content_len = Some(parse_int(val)?);
                         }
+
+                        // TODO: prevent copy
+                        headers_map.push(Header::new(
+                            ByteStr::copy_from_str(parse_str(key)?),
+                            Bytes::copy_from_slice(val),
+                        ));
                     }
 
                     if !parser.complete() {
@@ -159,9 +171,9 @@ where
                         ByteStr::from_utf8_unchecked(request_line.slice_ref(path))
                     };
 
-                    // `body_offset` is offset started from `header_offset`
-                    // and now `buffer` is already started from `header_offset`
-                    let headers = buffer.split_to(body_offset).freeze();
+                    // `body_offset` is offset started from `header_offset`,
+                    // but `buffer` is already started from `header_offset`
+                    buffer.advance(body_offset);
 
                     // `buffer` now contains [body..]
 
@@ -169,6 +181,7 @@ where
 
                     // `buffer` now empty
 
+                    let headers = Headers::from_buffer(headers_map);
                     let parts = Parts::new(method, path, version, headers, <_>::default());
                     let body = Body::new(io.clone(), content_len, body);
                     let request = Request::from_parts(parts,body);

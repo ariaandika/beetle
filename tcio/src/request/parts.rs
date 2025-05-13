@@ -1,10 +1,6 @@
-use bytes::Bytes;
-
-use super::HeaderParser;
 use crate::{
     common::ByteStr,
-    ext::FmtExt,
-    http::{Extensions, Method, Version},
+    http::{Extensions, Headers, Method, Version},
 };
 
 /// an http request parts
@@ -12,7 +8,7 @@ pub struct Parts {
     method: Method,
     path: ByteStr,
     version: Version,
-    headers: Bytes,
+    headers: Headers,
     extensions: Extensions,
 }
 
@@ -21,7 +17,7 @@ impl Parts {
         method: Method,
         path: ByteStr,
         version: Version,
-        headers: Bytes,
+        headers: Headers,
         extensions: Extensions,
     ) -> Self {
         Self {
@@ -49,8 +45,8 @@ impl Parts {
     }
 
     /// getter for http headers
-    pub fn headers(&self) -> Headers {
-        Headers { headers: &self.headers }
+    pub fn headers(&self) -> &Headers {
+        &self.headers
     }
 
     pub fn extensions(&self) -> &Extensions {
@@ -70,30 +66,6 @@ impl std::fmt::Debug for Parts {
             .field("version", &self.version)
             .field("headers", &self.headers())
             .finish()
-    }
-}
-
-pub struct Headers<'a> {
-    headers: &'a [u8],
-}
-
-impl Headers<'_> {
-    pub fn get(&self, k: &str) -> Option<&[u8]> {
-        HeaderParser::new(self.headers)
-            .find(|e| e.0 == k.as_bytes())
-            .map(|e| e.1)
-    }
-}
-
-impl std::fmt::Debug for Headers<'_> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let mut m = f.debug_map();
-
-        for (k, v) in HeaderParser::new(self.headers) {
-            m.key(&k.lossy()).value(&v.lossy());
-        }
-
-        m.finish()
     }
 }
 
