@@ -92,6 +92,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "beetle"
+version = "0.1.0"
+dependencies = [
+ "bytes",
+ "itoa",
+ "log",
+ "memchr",
+ "pin-project-lite",
+ "serde",
+ "serde_json",
+ "tokio",
+]
+
+[[package]]
 name = "bytes"
 version = "1.10.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -142,9 +156,9 @@ dependencies = [
 name = "example"
 version = "0.1.0"
 dependencies = [
+ "beetle",
  "dotenvy",
  "env_logger",
- "tcio",
  "tokio",
 ]
 
@@ -374,20 +388,6 @@ dependencies = [
  "proc-macro2",
  "quote",
  "unicode-ident",
-]
-
-[[package]]
-name = "tcio"
-version = "0.1.0"
-dependencies = [
- "bytes",
- "itoa",
- "log",
- "memchr",
- "pin-project-lite",
- "serde",
- "serde_json",
- "tokio",
 ]
 
 [[package]]
