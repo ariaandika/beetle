@@ -1,5 +1,8 @@
 //! helper types and traits
 
+#[cfg(feature = "json")]
+pub mod json;
+
 /// service which holds another service
 pub trait Layer<S> {
     type Service;
