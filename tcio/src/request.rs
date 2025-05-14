@@ -3,13 +3,14 @@ use crate::{
     IntoResponse,
     body::Body,
     common::ByteStr,
-    http::{Extensions, Method, Version},
+    http::{Extensions, Headers, Method, Version},
 };
 
 mod parts;
 
 pub mod futures;
 
+#[doc(inline)]
 pub use parts::Parts;
 
 /// a type that can be constructed from request
@@ -85,6 +86,10 @@ impl Request {
     /// getter for http version
     pub fn version(&self) -> Version {
         self.parts.version()
+    }
+
+    pub fn headers(&self) -> &Headers {
+        self.parts.headers()
     }
 }
 

@@ -243,6 +243,7 @@ where
 
 pin_project_lite::pin_project! {
     /// map the output of a future
+    #[derive(Debug)]
     pub struct MapErr<F,M> {
         #[pin]
         inner: F,
