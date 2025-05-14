@@ -1,4 +1,4 @@
-use crate::{http::StatusCode, ResBody};
+use crate::{http::StatusCode, Body};
 use super::{IntoResponse, IntoResponseParts, Parts, Response};
 
 macro_rules! into_response {
@@ -17,7 +17,7 @@ where
     R: IntoResponseParts
 {
     fn into_response(self) -> Response {
-        let (mut parts,body) = Response::default().into_parts();
+        let (mut parts,body) = Response::empty().into_parts();
         parts = R::into_response_parts(self, parts);
         Response::from_parts(parts,body)
     }
@@ -38,8 +38,8 @@ where
 
 into_response!((), self => <_>::default());
 into_response!(Response, self => self);
-into_response!(String, self => Response::new(self.into()));
-into_response!(ResBody, self => Response::new(self));
+into_response!(String, self => Response::new(Body::bytes(self)));
+into_response!(Body, self => Response::new(self));
 into_response!(std::convert::Infallible, self => match self { });
 
 impl IntoResponseParts for StatusCode {

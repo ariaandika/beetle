@@ -1,7 +1,7 @@
 //! http response
 use bytes::{BufMut, BytesMut};
 
-use crate::body::ResBody;
+use crate::body::Body;
 use crate::http::{StatusCode, Version};
 
 mod into_response;
@@ -49,17 +49,23 @@ impl Parts {
 }
 
 /// an http response
-#[derive(Default)]
 pub struct Response {
     parts: Parts,
-    body: ResBody,
+    body: Body,
 }
 
 /// construction methods
 impl Response {
+    pub(crate) fn empty() -> Self {
+        Self {
+            parts: <_>::default(),
+            body: Body::empty(),
+        }
+    }
+
     /// construct new response with body
-    pub fn new(body: ResBody) -> Response {
-        Response {
+    pub fn new(body: Body) -> Self {
+        Self {
             parts: <_>::default(),
             body,
         }
@@ -68,19 +74,19 @@ impl Response {
     /// construct response from parts
     ///
     /// see also [`Response::into_parts`]
-    pub fn from_parts(parts: Parts, body: ResBody) -> Response {
+    pub fn from_parts(parts: Parts, body: Body) -> Response {
         Response { parts, body }
     }
 
     /// destruct response into parts
     ///
     /// see also [`Response::from_parts`]
-    pub fn into_parts(self) -> (Parts, ResBody) {
+    pub fn into_parts(self) -> (Parts, Body) {
         (self.parts,self.body)
     }
 
     /// destruct response into [`ResBody`]
-    pub fn into_body(self) -> ResBody {
+    pub fn into_body(self) -> Body {
         self.body
     }
 }
@@ -101,6 +107,12 @@ impl Response {
     // pub fn headers(&self) -> &[Header] {
     //     self.parts.headers()
     // }
+}
+
+impl Default for Response {
+    fn default() -> Self {
+        Self::empty()
+    }
 }
 
 /// a type that can be converted into response

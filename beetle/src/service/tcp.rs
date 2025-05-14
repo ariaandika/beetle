@@ -14,7 +14,6 @@ use tokio::net::TcpStream;
 
 use super::HttpService;
 use crate::{
-    ResBody,
     body::Body,
     common::ByteStr,
     http::{Header, Headers, Method, Version},
@@ -75,8 +74,8 @@ pin_project_lite::pin_project! {
         IoReady,
         Parse,
         Inner { #[pin] future: Fut },
-        WriteReady { body: Option<ResBody> },
-        Write { body: Option<ResBody> },
+        WriteReady { body: Option<Body> },
+        Write { body: Option<Body> },
         Cleanup,
     }
 }
@@ -184,7 +183,7 @@ where
 
                     let headers = Headers::from_buffer(headers_map);
                     let parts = Parts::new(method, path, version, headers, <_>::default());
-                    let body = Body::new(io.clone(), content_len.unwrap_or_default(), body);
+                    let body = Body::tcp(io.clone(), content_len.unwrap_or_default(), body);
                     let request = Request::from_parts(parts,body);
 
                     let future = inner.call(request);
@@ -208,7 +207,7 @@ where
                         res_buffer.advance(read);
                     }
 
-                    ready!(body.as_mut().unwrap().poll_write_all_tcp(cx, io)?);
+                    ready!(Pin::new(body.as_mut().unwrap()).poll_write_all_tcp(cx, io)?);
 
                     #[cfg(feature = "log")]
                     log::trace!("request complete");

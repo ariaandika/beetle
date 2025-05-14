@@ -21,7 +21,7 @@ pub mod runtime;
 
 pub use request::{Request, FromRequest, FromRequestParts};
 pub use response::{Response, IntoResponse, IntoResponseParts};
-pub use body::{Body, ResBody};
+pub use body::Body;
 pub use routing::{Router, get, post, put, patch, delete};
 pub use service::{Service, HttpService};
 pub use runtime::listen;

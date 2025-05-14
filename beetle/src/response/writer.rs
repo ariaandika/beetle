@@ -8,7 +8,7 @@ use bytes::{BufMut, BytesMut};
 pub fn check(res: &mut Response) {
     res.parts.insert_header(
         b"content-length",
-        itoa::Buffer::new().format(res.body.len()).as_bytes(),
+        itoa::Buffer::new().format(res.body.content_len()).as_bytes(),
     );
 }
 

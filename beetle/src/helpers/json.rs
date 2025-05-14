@@ -12,7 +12,7 @@ use std::{
 };
 
 use crate::{
-    FromRequest, IntoResponse, Request, ResBody, Response, http::StatusCode, response::BadRequest,
+    FromRequest, IntoResponse, Request, Body, Response, http::StatusCode, response::BadRequest,
 };
 
 pub struct Json<T>(pub T);
@@ -33,7 +33,7 @@ impl<T: DeserializeOwned> FromRequest for Json<T> {
 impl<T: Serialize> IntoResponse for Json<T> {
     fn into_response(self) -> Response {
         match serde_json::to_vec(&self.0) {
-            Ok(ok) => ResBody::Bytes(ok.into()).into_response(),
+            Ok(ok) => Body::bytes(ok).into_response(),
             Err(_err) => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
         }
     }

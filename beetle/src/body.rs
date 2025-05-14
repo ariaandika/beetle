@@ -2,7 +2,7 @@
 use bytes::{Buf, BufMut, Bytes, BytesMut};
 use std::{
     io,
-    pin::{Pin, pin},
+    pin::Pin,
     sync::Arc,
     task::{
         Context,
@@ -12,33 +12,32 @@ use std::{
 };
 use tokio::net::TcpStream;
 
-/// Http Request Body.
 pub struct Body {
-    kind: BodyKind
+    kind: BodyKind,
 }
 
 enum BodyKind {
     Empty,
-    Exact(Bytes),
-    Arc(ArcBody),
+    Bytes(Bytes),
+    Tcp(TcpBody),
 }
 
 impl Body {
-    pub fn empty() -> Self {
+    pub(crate) fn empty() -> Self {
         Self {
             kind: BodyKind::Empty,
         }
     }
 
-    pub fn exact(bytes: Bytes) -> Self {
+    pub(crate) fn bytes(bytes: impl Into<Bytes>) -> Self {
         Self {
-            kind: BodyKind::Exact(bytes),
+            kind: BodyKind::Bytes(bytes.into()),
         }
     }
 
-    pub(crate) fn new(shared: Arc<TcpStream>, content_len: usize, buffer: BytesMut) -> Self {
+    pub(crate) fn tcp(shared: Arc<TcpStream>, content_len: usize, buffer: BytesMut) -> Self {
         Self {
-            kind: BodyKind::Arc(ArcBody {
+            kind: BodyKind::Tcp(TcpBody {
                 io: shared,
                 content_len,
                 read_len: 0,
@@ -51,13 +50,11 @@ impl Body {
     pub fn content_len(&self) -> usize {
         match &self.kind {
             BodyKind::Empty => 0,
-            BodyKind::Exact(b) => b.len(),
-            BodyKind::Arc(b) => b.content_len,
+            BodyKind::Bytes(b) => b.len(),
+            BodyKind::Tcp(b) => b.content_len,
         }
     }
-}
 
-impl Body {
     /// Read all body into [`BytesMut`].
     ///
     /// This equivalent to:
@@ -68,38 +65,47 @@ impl Body {
     pub fn collect(self) -> Collect {
         Collect { body: self }
     }
-}
 
-struct ArcBody {
-    io: Arc<TcpStream>,
-    content_len: usize,
-    read_len: usize,
-    buffer: BytesMut,
-}
+    pub(crate) fn is_remaining(&self) -> bool {
+        match &self.kind {
+            BodyKind::Empty => false,
+            BodyKind::Bytes(bytes) => !bytes.is_empty(),
+            BodyKind::Tcp(body) => body.is_remaining(),
+        }
+    }
 
-impl ArcBody {
+    #[allow(unused, reason = "used by form later")]
     pub(crate) fn poll_read(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<io::Result<()>> {
-        if self.read_len >= self.content_len {
-            return Ready(Err(io::Error::new(
-                io::ErrorKind::QuotaExceeded,
-                "body exhausted",
-            )));
+        match &mut self.kind {
+            BodyKind::Empty => Ready(Ok(())),
+            BodyKind::Bytes(_) => Ready(Ok(())),
+            BodyKind::Tcp(body) => Pin::new(body).poll_read(cx),
+        }
+    }
+
+    pub(crate) fn poll_write_all_tcp(
+        mut self: Pin<&mut Self>,
+        _: &mut Context,
+        io: &TcpStream,
+    ) -> Poll<io::Result<()>> {
+        while self.is_remaining() {
+            match &mut self.kind {
+                BodyKind::Empty => {}
+                BodyKind::Bytes(b) => {
+                    let read = io.try_write(b)?;
+                    b.advance(read);
+                }
+                BodyKind::Tcp(_) => panic!("cannot write tcp kind of `Body`"),
+            }
         }
 
-        ready!(pin!(self.io.readable()).poll(cx)?);
-
-        let read = {
-            let buf = self.buffer.chunk_mut();
-            let buf = unsafe {
-                &mut *(buf.as_uninit_slice_mut() as *mut [std::mem::MaybeUninit<u8>] as *mut [u8])
-            };
-            self.io.try_read(buf)?
-        };
-        unsafe { self.buffer.advance_mut(read) };
-
-        self.read_len += read;
-
         Ready(Ok(()))
+    }
+}
+
+impl std::fmt::Debug for Body {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_tuple("Body").field(&self.content_len()).finish()
     }
 }
 
@@ -116,8 +122,8 @@ impl Future for Collect {
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let body = match &mut self.body.kind {
             BodyKind::Empty => return Ready(Ok(<_>::default())),
-            BodyKind::Exact(b) => return Ready(Ok(std::mem::take(b))),
-            BodyKind::Arc(ok) => ok,
+            BodyKind::Bytes(b) => return Ready(Ok(std::mem::take(b))),
+            BodyKind::Tcp(ok) => ok,
         };
 
         while body.read_len < body.content_len {
@@ -128,91 +134,70 @@ impl Future for Collect {
     }
 }
 
-impl std::fmt::Debug for Body {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_tuple("Body").field(&self.content_len()).finish()
+struct TcpBody {
+    io: Arc<TcpStream>,
+    content_len: usize,
+    read_len: usize,
+    buffer: BytesMut,
+}
+
+fn io_err<E: Into<Box<dyn std::error::Error + Send + Sync>>>(e: E) -> io::Error {
+    io::Error::new(io::ErrorKind::InvalidData, e)
+}
+
+impl TcpBody {
+    fn is_remaining(&self) -> bool {
+        self.read_len < self.content_len
+    }
+
+    fn is_end_stream(&self) -> bool {
+        self.read_len >= self.content_len
+    }
+
+    fn poll_read(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<io::Result<()>> {
+        if self.is_end_stream() {
+            return Ready(Err(io_err("body exhausted")));
+        }
+
+        ready!(self.io.poll_read_ready(cx)?);
+
+        let read = {
+            let buf = self.buffer.chunk_mut();
+            let buf = unsafe {
+                &mut *(buf.as_uninit_slice_mut() as *mut [std::mem::MaybeUninit<u8>] as *mut [u8])
+            };
+            self.io.try_read(buf)?
+        };
+        unsafe { self.buffer.advance_mut(read) };
+
+        self.read_len += read;
+
+        Ready(Ok(()))
     }
 }
 
-
-// ===== Response Body =====
-
-#[derive(Default)]
-pub enum ResBody {
-    #[default]
-    Empty,
-    Bytes(Bytes),
-}
-
-impl ResBody {
-    /// Returns buffer length.
-    pub fn len(&self) -> usize {
-        match self {
-            ResBody::Empty => 0,
-            ResBody::Bytes(b) => b.len(),
+impl Buf for Body {
+    fn remaining(&self) -> usize {
+        match &self.kind {
+            BodyKind::Empty => 0,
+            BodyKind::Bytes(b) => b.remaining(),
+            BodyKind::Tcp(b) => b.content_len - b.read_len,
         }
     }
 
-    /// Returns `true` if buffer is empty.
-    pub fn is_empty(&self) -> bool {
-        match self {
-            ResBody::Empty => true,
-            ResBody::Bytes(b) => b.is_empty(),
+    fn chunk(&self) -> &[u8] {
+        match &self.kind {
+            BodyKind::Empty => &[],
+            BodyKind::Bytes(b) => b.chunk(),
+            BodyKind::Tcp(b) => b.buffer.chunk(),
         }
     }
 
-    pub(crate) fn poll_write_all_tcp(&mut self, _: &mut Context, io: &TcpStream) -> Poll<io::Result<()>> {
-        while !self.is_empty() {
-            match self {
-                ResBody::Empty => {},
-                ResBody::Bytes(buf) => {
-                    let read = io.try_write(buf)?;
-                    buf.advance(read);
-                },
-            }
-        }
-        Poll::Ready(Ok(()))
-    }
-}
-
-impl AsRef<[u8]> for ResBody {
-    fn as_ref(&self) -> &[u8] {
-        match self {
-            ResBody::Empty => &[],
-            ResBody::Bytes(bytes) => bytes.as_ref(),
-        }
-    }
-}
-
-impl From<&'static [u8]> for ResBody {
-    fn from(value: &'static [u8]) -> Self {
-        Self::Bytes(Bytes::from_static(value))
-    }
-}
-
-impl From<Bytes> for ResBody {
-    fn from(value: Bytes) -> Self {
-        Self::Bytes(value)
-    }
-}
-
-impl From<Vec<u8>> for ResBody {
-    fn from(value: Vec<u8>) -> Self {
-        Self::Bytes(value.into())
-    }
-}
-
-impl From<String> for ResBody {
-    fn from(value: String) -> Self {
-        Self::Bytes(value.into_bytes().into())
-    }
-}
-
-impl std::fmt::Debug for ResBody {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Empty => f.debug_tuple("ResBody").field(&"Empty").finish(),
-            Self::Bytes(b) => f.debug_tuple("ResBody").field(b).finish(),
+    fn advance(&mut self, cnt: usize) {
+        match &mut self.kind {
+            BodyKind::Empty => {}
+            BodyKind::Bytes(b) => b.advance(cnt),
+            BodyKind::Tcp(b) => b.buffer.advance(cnt),
         }
     }
 }
