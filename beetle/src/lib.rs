@@ -17,6 +17,8 @@ mod futures;
 
 pub mod service;
 pub mod routing;
+
+#[cfg(feature = "tokio")]
 pub mod runtime;
 
 pub use request::{Request, FromRequest, FromRequestParts};
@@ -24,4 +26,6 @@ pub use response::{Response, IntoResponse, IntoResponseParts};
 pub use body::Body;
 pub use routing::{Router, get, post, put, patch, delete};
 pub use service::{Service, HttpService};
+
+#[cfg(feature = "tokio")]
 pub use runtime::listen;
