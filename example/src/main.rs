@@ -1,5 +1,5 @@
 use std::io;
-use tcio::Router;
+use beetle::Router;
 
 #[tokio::main]
 async fn main() -> io::Result<()> {
@@ -9,5 +9,5 @@ async fn main() -> io::Result<()> {
     let routes = Router::new();
 
 
-    tcio::listen("0.0.0.0:3000", routes).await
+    beetle::listen("0.0.0.0:3000", routes).await
 }
