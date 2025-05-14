@@ -7,10 +7,10 @@ pub mod common;
 mod ext;
 
 pub mod http;
+pub mod body;
+
 pub mod request;
 pub mod response;
-
-pub mod body;
 
 pub mod helpers;
 mod futures;
