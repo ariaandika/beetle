@@ -71,12 +71,14 @@ pub trait StreamWriteExt: StreamWrite {
 
     fn poll_write_all<B: Buf>(&self, cx: &mut Context, buf: &mut B) -> Poll<io::Result<()>> {
         while Buf::has_remaining(&buf) {
-            self.poll_write(cx, buf);
+            ready!(self.poll_write(cx, buf));
         }
 
-        return Poll::Ready(Ok(()))
+        Poll::Ready(Ok(()))
     }
 }
+
+impl<S: StreamWrite> StreamWriteExt for S { }
 
 #[cfg(feature = "tokio")]
 mod rt_tokio {
