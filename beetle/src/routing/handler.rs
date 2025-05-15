@@ -11,9 +11,9 @@ use std::{
 };
 
 use crate::{
-    Body, FromRequest, FromRequestParts, IntoResponse, Request, Response, Service,
+    FromRequest, FromRequestParts, IntoResponse, Request, Response, Service,
     futures::{FutureExt, MapInfallible},
-    request,
+    request::{self, Body},
 };
 
 /// Function that can be a a [`Service`].

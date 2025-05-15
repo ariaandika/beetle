@@ -56,23 +56,6 @@ impl<S> Router<S> {
     }
 }
 
-impl<S> Router<S>
-where
-    S: HttpService,
-{
-    /// alternative way to start server
-    #[cfg(feature = "tokio")]
-    pub fn listen(
-        self,
-        addr: impl tokio::net::ToSocketAddrs + std::fmt::Display + Clone,
-    ) -> crate::runtime::Serve<
-        Router<S>,
-        impl Future<Output = Result<tokio::net::TcpListener, std::io::Error>>,
-    > {
-        crate::listen(addr, self)
-    }
-}
-
 impl<S> Service<Request> for Router<S>
 where
     S: HttpService
