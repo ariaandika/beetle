@@ -1,14 +1,16 @@
 //! http request
 use crate::{
     IntoResponse,
-    body::Body,
     common::ByteStr,
     http::{Extensions, Headers, Method, Version},
 };
 
 mod parts;
+mod body;
 
 pub mod futures;
+
+pub use body::Body;
 
 #[doc(inline)]
 pub use parts::Parts;
