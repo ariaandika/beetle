@@ -71,7 +71,7 @@ pub trait StreamWriteExt: StreamWrite {
 
     fn poll_write_all<B: Buf>(&self, cx: &mut Context, buf: &mut B) -> Poll<io::Result<()>> {
         while Buf::has_remaining(&buf) {
-            ready!(self.poll_write(cx, buf));
+            ready!(self.poll_write(cx, buf)?);
         }
 
         Poll::Ready(Ok(()))

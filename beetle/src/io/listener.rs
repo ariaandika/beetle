@@ -4,12 +4,17 @@ use std::{
     task::{Context, Poll},
 };
 
-pub trait BoundListener<Addr> {
+pub trait Runtime<Addr> {
     type Listener: Listener;
 
-    type Future: Future<Output = io::Result<Self::Listener>>;
+    type BindFuture: Future<Output = io::Result<Self::Listener>>;
 
-    fn bind(addr: Addr) -> Self::Future;
+    fn bind(addr: Addr) -> Self::BindFuture;
+
+    fn spawn<F>(future: F)
+    where
+        F: Future + Send + 'static,
+        F::Output: Send + 'static;
 }
 
 pub trait Listener: Sized {
@@ -28,14 +33,22 @@ mod rt_tokio {
 
     use super::*;
 
-    impl<Addr: ToSocketAddrs + 'static> BoundListener<Addr> for TcpListener {
+    impl<Addr: ToSocketAddrs + 'static> Runtime<Addr> for TcpListener {
         type Listener = Self;
 
         // #63063 <https://github.com/rust-lang/rust/issues/63063>
-        type Future = Pin<Box<dyn Future<Output = io::Result<TcpListener>>>>;
+        type BindFuture = Pin<Box<dyn Future<Output = io::Result<TcpListener>>>>;
 
-        fn bind(addr: Addr) -> Self::Future {
+        fn bind(addr: Addr) -> Self::BindFuture {
             Box::pin(Self::bind(addr))
+        }
+
+        fn spawn<F>(future: F)
+        where
+            F: Future + Send + 'static,
+            F::Output: Send + 'static,
+        {
+            tokio::spawn(future);
         }
     }
 
