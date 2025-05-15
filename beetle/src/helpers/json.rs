@@ -12,7 +12,7 @@ use std::{
 };
 
 use crate::{
-    FromRequest, IntoResponse, Request, Body, Response, http::StatusCode, response::BadRequest,
+    FromRequest, IntoResponse, Request, Response, helpers::BadRequest, http::StatusCode, response,
 };
 
 pub struct Json<T>(pub T);
@@ -33,7 +33,7 @@ impl<T: DeserializeOwned> FromRequest for Json<T> {
 impl<T: Serialize> IntoResponse for Json<T> {
     fn into_response(self) -> Response {
         match serde_json::to_vec(&self.0) {
-            Ok(ok) => Body::bytes(ok).into_response(),
+            Ok(ok) => response::Body::bytes(ok).into_response(),
             Err(_err) => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
         }
     }
@@ -110,7 +110,7 @@ impl From<serde_json::Error> for JsonFutureError {
     }
 }
 
-impl std::error::Error for JsonFutureError { }
+impl std::error::Error for JsonFutureError {}
 
 impl fmt::Display for JsonFutureError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -134,4 +134,3 @@ impl IntoResponse for JsonFutureError {
         BadRequest::new(self).into_response()
     }
 }
-
