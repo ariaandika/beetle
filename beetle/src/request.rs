@@ -5,19 +5,17 @@ use crate::{
     http::{Extensions, Headers, Method, Version},
 };
 
-mod parts;
 mod body;
+mod parts;
 
 pub mod futures;
 
 pub use body::Body;
-
-#[doc(inline)]
 pub use parts::Parts;
 
-/// a type that can be constructed from request
+/// A type that can be constructed from [`Request`].
 ///
-/// this trait is used as request handler parameters
+/// This trait is used as request handler parameters.
 pub trait FromRequest: Sized {
     type Error: IntoResponse;
 
@@ -26,9 +24,9 @@ pub trait FromRequest: Sized {
     fn from_request(req: Request) -> Self::Future;
 }
 
-/// a type that can be constructed from request parts
+/// A type that can be constructed from request [`Parts`].
 ///
-/// this trait is used as request handler parameters
+/// This trait is used as request handler parameters.
 pub trait FromRequestParts: Sized {
     type Error: IntoResponse;
 
@@ -37,29 +35,29 @@ pub trait FromRequestParts: Sized {
     fn from_request_parts(parts: &mut Parts) -> Self::Future;
 }
 
-/// an http request
+/// HTTP Request.
 pub struct Request {
     parts: Parts,
     body: Body,
 }
 
-/// construction methods
+/// Construction methods.
 impl Request {
-    /// construct request from parts
+    /// Construct request from [`Parts`] and [`Body`].
     ///
-    /// see also [`Request::into_parts`]
+    /// See also [`Request::into_parts`].
     pub fn from_parts(parts: Parts, body: Body) -> Request {
-        Self { parts, body  }
+        Self { parts, body }
     }
 
-    /// destruct request into parts
+    /// Destruct request into [`Parts`] and [`Body`].
     ///
-    /// see also [`Request::from_parts`]
-    pub fn into_parts(self) -> (Parts,Body) {
-        (self.parts,self.body)
+    /// See also [`Request::from_parts`]
+    pub fn into_parts(self) -> (Parts, Body) {
+        (self.parts, self.body)
     }
 
-    /// destruct request into [`Body`]
+    /// Comsume request into [`Body`].
     pub fn into_body(self) -> Body {
         self.body
     }
@@ -73,23 +71,24 @@ impl Request {
     }
 }
 
-/// delegate methods
+/// Delegate methods.
 impl Request {
-    /// getter for http method
+    /// Returns HTTP Method.
     pub fn method(&self) -> Method {
         self.parts.method()
     }
 
-    /// getter for http path
+    /// Returns HTTP Path.
     pub fn path(&self) -> &ByteStr {
         self.parts.path()
     }
 
-    /// getter for http version
+    /// Returns HTTP Version.
     pub fn version(&self) -> Version {
         self.parts.version()
     }
 
+    /// Returns HTTP Headers.
     pub fn headers(&self) -> &Headers {
         self.parts.headers()
     }
@@ -105,4 +104,3 @@ impl std::fmt::Debug for Request {
             .finish()
     }
 }
-
