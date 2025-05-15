@@ -5,8 +5,6 @@ use crate::{request::Request, response::Response};
 
 pub mod servicefn;
 pub mod http;
-
-#[cfg(feature = "tokio")]
 pub mod tcp;
 
 pub trait Service<Request> {
