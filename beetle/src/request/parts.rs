@@ -3,7 +3,7 @@ use crate::{
     http::{Extensions, Headers, Method, Version},
 };
 
-/// an http request parts
+/// HTTP Request Parts.
 #[derive(Default)]
 pub struct Parts {
     method: Method,
@@ -30,22 +30,22 @@ impl Parts {
         }
     }
 
-    /// getter for http method
+    /// Returns HTTP Method.
     pub fn method(&self) -> Method {
         self.method
     }
 
-    /// getter for http path
+    /// Returns HTTP Path.
     pub fn path(&self) -> &ByteStr {
         &self.path
     }
 
-    /// getter for http version
+    /// Returns HTTP Version.
     pub fn version(&self) -> Version {
         self.version
     }
 
-    /// getter for http headers
+    /// Returns HTTP Headers.
     pub fn headers(&self) -> &Headers {
         &self.headers
     }

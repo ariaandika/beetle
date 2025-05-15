@@ -1,4 +1,4 @@
-//! http request
+//! HTTP Request.
 use crate::{
     IntoResponse,
     common::ByteStr,
