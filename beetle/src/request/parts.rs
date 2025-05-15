@@ -4,6 +4,7 @@ use crate::{
 };
 
 /// an http request parts
+#[derive(Default)]
 pub struct Parts {
     method: Method,
     path: ByteStr,

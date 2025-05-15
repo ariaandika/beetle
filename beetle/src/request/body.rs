@@ -32,6 +32,29 @@ pub struct Body {
 }
 
 impl Body {
+    /// Create empty [`Body`].
+    pub fn empty() -> Self {
+        Self {
+            content_len: 0,
+            io: None,
+            read: AtomicUsize::new(0),
+            buffer: Bytes::new()
+        }
+    }
+
+    pub(crate) fn new(
+        content_len: usize,
+        io: Option<Socket>,
+        buffer: Bytes,
+    ) -> Self {
+        Self {
+            content_len,
+            io,
+            read: AtomicUsize::new(buffer.len()),
+            buffer,
+        }
+    }
+
     /// Returns maybe partially read body.
     ///
     /// There is maybe already partially read body when parsing headers.
@@ -84,6 +107,12 @@ impl Body {
             Some(io) => io.poll_read_buf(cx, buf),
             None => return Poll::Ready(Err(exhausted())),
         }
+    }
+}
+
+impl Default for Body {
+    fn default() -> Self {
+        Self::empty()
     }
 }
 

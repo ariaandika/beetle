@@ -36,6 +36,7 @@ pub trait FromRequestParts: Sized {
 }
 
 /// HTTP Request.
+#[derive(Default)]
 pub struct Request {
     parts: Parts,
     body: Body,
