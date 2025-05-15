@@ -4,6 +4,8 @@
 mod docs;
 
 pub mod common;
+pub mod io;
+pub mod net;
 mod ext;
 
 pub mod http;
