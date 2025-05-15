@@ -13,7 +13,7 @@ impl Headers {
     }
 
     pub fn get(&self, key: &str) -> Option<&Header> {
-        self.headers.iter().find(|e| e.name == key)
+        self.headers.iter().find(|e| e.name.eq_ignore_ascii_case(key))
     }
 }
 
@@ -29,6 +29,10 @@ impl Header {
     }
 
     pub fn name(&self) -> &str {
+        &self.name
+    }
+
+    pub fn name_ref(&self) -> &ByteStr {
         &self.name
     }
 
