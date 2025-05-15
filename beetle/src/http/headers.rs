@@ -2,7 +2,7 @@ use bytes::Bytes;
 
 use crate::{common::ByteStr, ext::FmtExt};
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct Headers {
     headers: Vec<Header>,
 }
