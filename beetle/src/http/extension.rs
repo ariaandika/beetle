@@ -4,7 +4,7 @@ use std::{
 };
 
 /// HTTP Extensions.
-pub struct Extensions(HashMap<TypeId, Box<dyn Any + 'static>>);
+pub struct Extensions(HashMap<TypeId, Box<dyn Any + Send + Sync + 'static>>);
 
 impl Extensions {
     pub fn new() -> Self {
@@ -21,7 +21,7 @@ impl Extensions {
         Some(unsafe { ok.downcast_ref::<T>().unwrap_unchecked() })
     }
 
-    pub fn insert<T: Any>(&mut self, value: T) -> Option<T> {
+    pub fn insert<T: Any + Send + Sync>(&mut self, value: T) -> Option<T> {
         let ok = self.0.insert(TypeId::of::<T>(), Box::new(value))?;
         // SAFETY: the provided T is equal to the value
         Some(*unsafe { ok.downcast::<T>().unwrap_unchecked() })
