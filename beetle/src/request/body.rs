@@ -2,8 +2,8 @@ use bytes::{BufMut, Bytes, BytesMut};
 use std::{
     io,
     pin::Pin,
-    sync::atomic::{AtomicUsize, Ordering},
-    task::{Context, Poll, ready},
+    sync::{atomic::{AtomicUsize, Ordering}, Arc},
+    task::{ready, Context, Poll},
 };
 
 use crate::{io::StreamReadExt, net::Socket};
@@ -15,7 +15,7 @@ fn exhausted() -> io::Error {
 #[derive(Debug)]
 pub struct Body {
     content_len: usize,
-    io: Option<Socket>,
+    io: Option<Arc<Socket>>,
 
     /// How many content is read, including `self.buffer`
     /// and incoming bytes from `self.io`.
@@ -44,7 +44,7 @@ impl Body {
 
     pub(crate) fn new(
         content_len: usize,
-        io: Option<Socket>,
+        io: Option<Arc<Socket>>,
         buffer: Bytes,
     ) -> Self {
         Self {
@@ -105,7 +105,7 @@ impl Body {
     ) -> Poll<io::Result<usize>> {
         match &self.io {
             Some(io) => io.poll_read_buf(cx, buf),
-            None => return Poll::Ready(Err(exhausted())),
+            None => Poll::Ready(Err(exhausted())),
         }
     }
 }
@@ -121,7 +121,7 @@ pub struct Collect {
     buffer: BytesMut,
     content_len: usize,
     read: usize,
-    io: Option<Socket>,
+    io: Option<Arc<Socket>>,
 }
 
 impl Collect {

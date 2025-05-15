@@ -10,7 +10,7 @@ mod parts;
 
 pub mod futures;
 
-pub use body::Body;
+pub use body::{Body, Collect};
 pub use parts::Parts;
 
 /// A type that can be constructed from [`Request`].
