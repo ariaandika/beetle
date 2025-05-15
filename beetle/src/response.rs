@@ -9,7 +9,7 @@ mod writer;
 
 pub use body::Body;
 pub use parts::Parts;
-pub use writer::{check, write};
+pub use writer::{validate, write};
 
 /// A type that can be converted into [`Response`].
 ///

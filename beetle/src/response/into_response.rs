@@ -1,5 +1,5 @@
-use crate::{http::StatusCode, Body};
-use super::{IntoResponse, IntoResponseParts, Parts, Response};
+use super::{Body, IntoResponse, IntoResponseParts, Parts, Response};
+use crate::http::StatusCode;
 
 macro_rules! into_response {
     ($target:ty,$self:ident => $body:expr) => {
@@ -17,7 +17,7 @@ where
     R: IntoResponseParts
 {
     fn into_response(self) -> Response {
-        let (mut parts,body) = Response::empty().into_parts();
+        let (mut parts,body) = Response::default().into_parts();
         parts = R::into_response_parts(self, parts);
         Response::from_parts(parts,body)
     }
@@ -44,7 +44,7 @@ into_response!(std::convert::Infallible, self => match self { });
 
 impl IntoResponseParts for StatusCode {
     fn into_response_parts(self, mut parts: Parts) -> Parts {
-        parts.status = self;
+        *parts.status_mut() = self;
         parts
     }
 }

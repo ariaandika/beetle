@@ -1,5 +1,8 @@
 use bytes::Bytes;
-use std::task::Context;
+use std::{
+    io,
+    task::{Context, Poll},
+};
 
 /// HTTP Response Body.
 pub struct Body {
@@ -25,10 +28,17 @@ impl Body {
         }
     }
 
+    /// Returns the body length.
+    pub fn content_len(&self) -> usize {
+        match &self.kind {
+            Kind::Bytes(b) => b.len(),
+        }
+    }
+
     /// Poll for data.
-    pub(crate) fn poll_data(&mut self, _: &mut Context) -> Bytes {
+    pub(crate) fn poll_data(&mut self, _: &mut Context) -> Poll<io::Result<Bytes>> {
         match &mut self.kind {
-            Kind::Bytes(b) => std::mem::take(b),
+            Kind::Bytes(b) => Poll::Ready(Ok(std::mem::take(b))),
         }
     }
 
@@ -45,4 +55,3 @@ impl Default for Body {
         Self::empty()
     }
 }
-

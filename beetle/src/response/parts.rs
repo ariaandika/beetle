@@ -34,6 +34,11 @@ impl Parts {
         self.status
     }
 
+    /// Returns mutable reference of HTTP Status Code.
+    pub fn status_mut(&mut self) -> &mut StatusCode {
+        &mut self.status
+    }
+
     /// Returns HTTP Headers.
     pub fn headers(&self) -> &Headers {
         &self.headers

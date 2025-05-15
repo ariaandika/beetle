@@ -5,20 +5,24 @@ use bytes::{BufMut, BytesMut};
 ///
 /// - add httpdate
 /// - add content length
-pub fn check(res: &mut Response) {
+pub fn validate(res: &mut Response) {
+    // todo!("add httpdate")
+
+    let mut b = itoa::Buffer::new();
+    let content_len = b.format(res.body.content_len());
     res.parts.insert_header(
         b"content-length",
-        itoa::Buffer::new().format(res.body.content_len()).as_bytes(),
+        content_len.as_bytes(),
     );
 }
 
 /// write http response parts into buffer
 pub fn write(parts: &Parts, bytes: &mut BytesMut) {
-    bytes.put_slice(parts.version.as_str().as_bytes());
+    bytes.put_slice(parts.version().as_str().as_bytes());
     bytes.put_slice(b" ");
-    bytes.put_slice(parts.status.as_str().as_bytes());
+    bytes.put_slice(parts.status().as_str().as_bytes());
     bytes.put_slice(b"\r\n");
-    bytes.put_slice(&parts.headers);
+    // bytes.put_slice(&parts.headers());
     bytes.extend_from_slice(b"\r\n");
 }
 
