@@ -14,6 +14,11 @@ impl ByteStr {
         Self { bytes: Bytes::new() }
     }
 
+    /// Create [`ByteStr`] from a slice of `bytes` that is equivalent to the given `subset`.
+    pub fn from_slice_of(subset: &str, bytes: &Bytes) -> Self {
+        Self { bytes: bytes.slice_ref(subset.as_bytes()) }
+    }
+
     /// Converts a [`Bytes`] to a [`ByteStr`].
     pub fn from_utf8(bytes: Bytes) -> Result<Self, std::str::Utf8Error> {
         std::str::from_utf8(&bytes)?;
