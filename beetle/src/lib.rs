@@ -9,8 +9,6 @@ pub mod net;
 mod ext;
 
 pub mod http;
-pub mod body;
-
 pub mod request;
 pub mod response;
 
@@ -20,12 +18,10 @@ mod futures;
 pub mod service;
 pub mod routing;
 
-#[cfg(feature = "tokio")]
 pub mod runtime;
 
 pub use request::{Request, FromRequest, FromRequestParts};
 pub use response::{Response, IntoResponse, IntoResponseParts};
-pub use body::Body;
 pub use routing::{Router, get, post, put, patch, delete};
 pub use service::{Service, HttpService};
 

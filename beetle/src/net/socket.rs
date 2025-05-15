@@ -10,7 +10,7 @@ use tokio::{
     net::{TcpStream, UnixStream},
 };
 
-use crate::io::StreamRead;
+use crate::io::{StreamRead, StreamWrite};
 
 /// An either `TcpStream` or `Socket`, which implement
 /// `AsyncRead` and `AsyncWrite` transparently.
@@ -30,15 +30,47 @@ enum Kind {
 impl StreamRead for Socket {
     fn try_read(&self, buf: &mut [u8]) -> io::Result<usize> {
         match &self.kind {
+            #[cfg(feature = "tokio")]
             Kind::TokioTcp(t) => t.try_read(buf),
+            #[cfg(all(feature = "tokio", unix))]
             Kind::TokioUnixSocket(u) => u.try_read(buf),
+            #[cfg(not(feature = "tokio"))]
+            _ => Ok(0)
         }
     }
 
     fn poll_read_ready(&self, cx: &mut Context) -> Poll<io::Result<()>> {
         match &self.kind {
+            #[cfg(feature = "tokio")]
             Kind::TokioTcp(t) => t.poll_read_ready(cx),
+            #[cfg(all(feature = "tokio", unix))]
             Kind::TokioUnixSocket(u) => u.poll_read_ready(cx),
+            #[cfg(not(feature = "tokio"))]
+            _ => Poll::Ready(Ok(())),
+        }
+    }
+}
+
+impl StreamWrite for Socket {
+    fn try_write(&self, buf: &[u8]) -> io::Result<usize> {
+        match &self.kind {
+            #[cfg(feature = "tokio")]
+            Kind::TokioTcp(t) => t.try_write(buf),
+            #[cfg(all(feature = "tokio", unix))]
+            Kind::TokioUnixSocket(u) => u.try_write(buf),
+            #[cfg(not(feature = "tokio"))]
+            _ => Ok(0),
+        }
+    }
+
+    fn poll_write_ready(&self, cx: &mut Context) -> Poll<io::Result<()>> {
+        match &self.kind {
+            #[cfg(feature = "tokio")]
+            Kind::TokioTcp(t) => t.poll_write_ready(cx),
+            #[cfg(all(feature = "tokio", unix))]
+            Kind::TokioUnixSocket(u) => u.poll_write_ready(cx),
+            #[cfg(not(feature = "tokio"))]
+            _ => Poll::Ready(Ok(())),
         }
     }
 }
