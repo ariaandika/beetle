@@ -1,6 +1,7 @@
 use crate::{
     common::ByteStr,
-    http::{Extensions, Headers, Method, Version},
+    headers::Headers,
+    http::{Extensions, Method, Version},
 };
 
 /// HTTP Request Parts.

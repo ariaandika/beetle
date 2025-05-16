@@ -2,7 +2,8 @@
 use crate::{
     IntoResponse,
     common::ByteStr,
-    http::{Extensions, Headers, Method, Version},
+    headers::Headers,
+    http::{Extensions, Method, Version},
 };
 
 mod body;

@@ -1,5 +1,8 @@
 //! HTTP Response.
-use crate::http::{Headers, StatusCode, Version};
+use crate::{
+    headers::Headers,
+    http::{StatusCode, Version},
+};
 
 mod body;
 mod parts;

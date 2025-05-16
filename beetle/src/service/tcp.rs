@@ -14,7 +14,8 @@ use std::{
 use super::HttpService;
 use crate::{
     common::ByteStr,
-    http::{Header, Headers, Method, Version},
+    headers::{Header, Headers},
+    http::{Method, Version},
     io::{StreamReadExt, StreamWriteExt},
     net::Socket,
     request::{self, Parts, Request},

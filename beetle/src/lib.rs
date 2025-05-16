@@ -9,6 +9,7 @@ pub mod net;
 mod ext;
 
 pub mod http;
+pub mod headers;
 pub mod request;
 pub mod response;
 

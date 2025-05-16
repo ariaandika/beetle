@@ -1,4 +1,7 @@
-use crate::http::{Extensions, Headers, StatusCode, Version};
+use crate::{
+    headers::Headers,
+    http::{Extensions, StatusCode, Version},
+};
 
 /// HTTP Response Parts.
 #[derive(Default)]
