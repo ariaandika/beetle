@@ -1,2 +1,11 @@
+mod name;
+mod value;
+mod entry;
 mod map;
-pub use map::{Headers, Header, Sequence};
+mod iter;
+
+pub use name::{HeaderName, IntoHeaderName};
+pub use value::{HeaderValue, Sequence};
+pub use map::HeaderMap;
+pub use entry::{Entry, GetAll};
+pub use iter::Iter;

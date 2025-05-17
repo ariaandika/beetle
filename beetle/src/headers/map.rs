@@ -1,87 +1,353 @@
-use bytes::Bytes;
+use std::{
+    iter::repeat_with,
+    mem::{replace, take},
+};
 
-use crate::{common::ByteStr, ext::FmtExt};
+use super::{
+    HeaderName, HeaderValue, IntoHeaderName,
+    entry::{Entry, GetAll},
+    iter::Iter,
+};
 
-#[derive(Debug, Default)]
-pub struct Headers {
-    headers: Vec<Header>,
+type Size = u16;
+
+/// HTTP Headers Multimap.
+#[derive(Default)]
+pub struct HeaderMap {
+    indices: Box<[Option<Size>]>,
+    entries: Vec<Entry>,
+    extra_len: Size,
+    delim: Size,
+    is_full: bool,
 }
 
-impl Headers {
-    pub(crate) fn from_buffer(buffer: Vec<Header>) -> Headers {
-        Self { headers: buffer }
-    }
-
-    pub fn get(&self, key: &str) -> Option<&Header> {
-        self.headers.iter().find(|e| e.name.eq_ignore_ascii_case(key))
-    }
-}
-
-pub struct Header {
-    name: ByteStr,
-    value: Bytes,
-    is_str: bool,
-}
-
-impl Header {
-    pub(crate) fn new(name: ByteStr, value: Bytes) -> Self {
-        Self { name, value, is_str: false }
-    }
-
-    pub fn name(&self) -> &str {
-        &self.name
-    }
-
-    pub fn name_ref(&self) -> &ByteStr {
-        &self.name
-    }
-
-    pub fn value(&self) -> &[u8] {
-        &self.value
-    }
-
-    pub fn as_str(&self) -> Result<&str, std::str::Utf8Error> {
-        match self.is_str {
-            false => std::str::from_utf8(&self.value),
-            // SAFETY: string validity is tracked and is immutable
-            true => Ok(unsafe { std::str::from_utf8_unchecked(&self.value) }),
+impl HeaderMap {
+    /// Create new empty [`HeaderMap`].
+    ///
+    /// This function does not allocate.
+    pub fn new() -> Self {
+        Self {
+            // zero sized type does not allocate
+            indices: Box::new([]),
+            entries: Vec::new(),
+            extra_len: 0,
+            delim: 0,
+            is_full: true,
         }
     }
 
-    pub fn to_str(&mut self) -> Result<&str, std::str::Utf8Error> {
-        if !self.is_str {
-            std::str::from_utf8(&self.value)?;
-            self.is_str = true;
+    /// Create new empty [`HeaderMap`] with at least the specified capacity.
+    ///
+    /// If the `capacity` is `0`, this function does not allocate.
+    pub fn with_capacity(capacity: usize) -> Self {
+        if capacity == 0 {
+            return Self::new();
         }
-        self.as_str()
-    }
-
-    /// Returns interator that parse `"; "` sequence.
-    pub fn as_sequence(&self) -> Sequence {
-        Sequence {
-            value: self.as_str().ok().map(|e| e.split("; ")),
+        let new_cap = capacity.next_power_of_two();
+        Self {
+            indices: Vec::from_iter(repeat_with(<_>::default).take(new_cap)).into_boxed_slice(),
+            entries: Vec::with_capacity(new_cap),
+            extra_len: 0,
+            delim: new_cap as Size * 3 / 4,
+            is_full: false,
         }
     }
-}
 
-#[derive(Debug)]
-pub struct Sequence<'a> {
-    value: Option<std::str::Split<'a,&'static str>>,
-}
+    /// Returns headers length.
+    pub fn len(&self) -> usize {
+        self.entries.len() + self.extra_len as usize
+    }
 
-impl<'a> Iterator for Sequence<'a> {
-    type Item = &'a str;
+    /// Returns an iterator over the headers.
+    pub fn iter(&self) -> Iter {
+        Iter::new(self)
+    }
 
-    fn next(&mut self) -> Option<Self::Item> {
-        self.value.as_mut()?.next()
+    pub(crate) fn entries(&self) -> &[Entry] {
+        &self.entries
+    }
+
+    pub(crate) fn entries_mut(&mut self) -> &mut Vec<Entry> {
+        &mut self.entries
+    }
+
+    /// Returns `true` if the map contains a header value for the header key.
+    pub fn contains_key(&self, name: &HeaderName) -> bool {
+        self.get(name).is_some()
+    }
+
+    /// Returns a reference to the first header value corresponding to the header name.
+    pub fn get<K: IntoHeaderName>(&self, name: K) -> Option<&HeaderValue> {
+        if self.entries.is_empty() {
+            return None;
+        }
+
+        let mask = self.indices.len() as Size;
+        let hash = name.hash();
+        let mut index = hash & (mask - 1);
+
+        loop {
+            let entry_index = self.indices[index as usize]?;
+            let entry = &self.entries[entry_index as usize];
+
+            if entry.hash() == &hash && entry.name().as_str() == name.as_str() {
+                return Some(entry.value());
+            }
+
+            // Get Collision
+            index = (index + 1) & (mask - 1);
+        }
+    }
+
+    /// Returns a reference to all header values corresponding to the header name.
+    pub fn get_all<K: IntoHeaderName>(&self, name: K) -> GetAll {
+        if self.entries.is_empty() {
+            return GetAll::empty();
+        }
+
+        let mask = self.indices.len() as Size;
+        let hash = name.hash();
+        let mut index = hash & (mask - 1);
+
+        loop {
+            let Some(entry_index) = self.indices[index as usize] else {
+                return GetAll::empty();
+            };
+            let entry = &self.entries[entry_index as usize];
+
+            if entry.hash() == &hash && entry.name().as_str() == name.as_str() {
+                return GetAll::new(entry);
+            }
+
+            // Get Collision
+            index = (index + 1) & (mask - 1);
+        }
+    }
+
+    /// Removes a header from the map, returning the first header value at the key if the key was
+    /// previously in the map.
+    pub fn remove<K: IntoHeaderName>(&mut self, name: K) -> Option<HeaderValue> {
+        if self.entries.is_empty() {
+            return None;
+        }
+
+        let mask = self.indices.len() as Size;
+        let hash = name.hash();
+        let mut index = hash & (mask - 1);
+
+        loop {
+            let entry_index = self.indices[index as usize]? as usize;
+            let entry = &self.entries[entry_index];
+
+            if entry.hash() == &hash && entry.name().as_str() == name.as_str() {
+                if let Some(last_entry) = self.entries.last() {
+                    if last_entry.hash() != entry.hash() {
+                        let mut index = last_entry.hash() & (mask - 1);
+
+                        loop {
+                            let inner_entry_index = self.indices[index as usize].as_mut().unwrap();
+                            let inner_entry = &self.entries[*inner_entry_index as usize];
+                            if inner_entry.hash() == last_entry.hash()
+                                && inner_entry.name().as_str() == last_entry.name().as_str()
+                            {
+                                *inner_entry_index = entry_index as Size;
+                                break;
+                            }
+                            index = (index + 1) & (mask - 1);
+                        }
+                    }
+                }
+                let entry_index = self.indices[index as usize].take().unwrap();
+                let entry = self.entries.swap_remove(entry_index as usize);
+                self.extra_len -= entry.extra_len();
+                let (_,value) = entry.into_parts();
+                return Some(value);
+            }
+
+            // Remove Collision
+            index = (index + 1) & (mask - 1);
+        }
+    }
+
+    /// Inserts a key-value pair into the map.
+    ///
+    /// If the map did have this key present, the value is updated, and the old
+    /// value is returned.
+    ///
+    /// If the map did not have this header key present, [`None`] is returned.
+    pub fn insert(&mut self, name: HeaderName, value: HeaderValue) -> Option<HeaderValue> {
+        self.try_insert(name, value, false)
+    }
+
+    /// Append a header key and value into the map.
+    ///
+    /// Unlike [`insert`][HeaderMap::insert], if header key is present, header value is still
+    /// appended as extra value.
+    pub fn append(&mut self, name: HeaderName, value: HeaderValue) {
+        let _result = self.try_insert(name, value, true);
+        debug_assert!(_result.is_none());
+    }
+
+    fn try_insert(&mut self, name: HeaderName, value: HeaderValue, append: bool) -> Option<HeaderValue> {
+        if self.is_full {
+            self.increase_capacity();
+        }
+
+        let mask = self.indices.len() as Size;
+        let hash = super::name::Sealed::hash(&name);
+        let mut index = hash & (mask - 1);
+
+        let result = loop {
+            match &mut self.indices[index as usize] {
+                // No collision
+                index @ None => {
+                    let entry_index = self.entries.len();
+                    *index = Some(entry_index as _);
+                    self.entries.push(Entry::new(hash, name, value));
+                    break None
+                },
+
+                Some(entry_index) => {
+                    let entry = &mut self.entries[*entry_index as usize];
+
+                    if entry.hash() == &hash && entry.name().as_str() == name.as_str() {
+                        break if append {
+                            // Append
+                            entry.push(value);
+                            self.extra_len += 1;
+                            None
+                        } else {
+                            // Returns duplicate
+                            let entry = replace(entry, Entry::new(hash, name, value));
+                            Some(entry.into_parts().1)
+                        };
+                    }
+
+                    // Insert Collision
+                    index = (index + 1) & (mask - 1);
+                }
+            }
+        };
+
+        self.is_full = self.entries.len() as Size > self.delim;
+
+        result
+    }
+
+
+    fn increase_capacity(&mut self) {
+        assert!(self.is_full, "[BUG] increasing capacity should only `is_full`");
+        let new_cap = (self.indices.len() + 1).next_power_of_two().max(8);
+
+        let mut me = HeaderMap::with_capacity(new_cap);
+
+        for entry in take(&mut self.entries) {
+            let (name,value) = entry.into_parts();
+            me.try_insert(name, value, true);
+        }
+
+        println!("Resize({new_cap})");
+        *self = me;
     }
 }
 
-impl std::fmt::Debug for Header {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        f.debug_struct("Header")
-            .field("name", &self.name)
-            .field("value", &self.value.lossy())
+impl std::fmt::Debug for HeaderMap {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Headers")
             .finish()
     }
 }
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    fn header_map() {
+        let mut map = HeaderMap::new();
+
+        assert!(map.get(&HeaderName::new("content-type")).is_none());
+
+        map.insert(HeaderName::new("content-type"), HeaderValue::new("FOO"));
+        assert!(map.contains_key(&HeaderName::new("content-type")));
+
+        map.insert(HeaderName::new("accept"), HeaderValue::new("BAR"));
+        map.insert(HeaderName::new("content-length"), HeaderValue::new("LEN"));
+        map.insert(HeaderName::new("host"), HeaderValue::new("BAR"));
+        map.insert(HeaderName::new("date"), HeaderValue::new("BAR"));
+        map.insert(HeaderName::new("referer"), HeaderValue::new("BAR"));
+        map.insert(HeaderName::new("rim"), HeaderValue::new("BAR"));
+
+        assert!(map.contains_key(&HeaderName::new("content-type")));
+        assert!(map.contains_key(&HeaderName::new("accept")));
+        assert!(map.contains_key(&HeaderName::new("content-length")));
+        assert!(map.contains_key(&HeaderName::new("host")));
+        assert!(map.contains_key(&HeaderName::new("date")));
+        assert!(map.contains_key(&HeaderName::new("referer")));
+        assert!(map.contains_key(&HeaderName::new("rim")));
+
+        println!("Insert Allocate");
+
+        map.insert(HeaderName::new("lea"), HeaderValue::new("BAR"));
+
+        assert!(map.contains_key(&HeaderName::new("content-type")));
+        assert!(map.contains_key(&HeaderName::new("accept")));
+        assert!(map.contains_key(&HeaderName::new("content-length")));
+        assert!(map.contains_key(&HeaderName::new("host")));
+        assert!(map.contains_key(&HeaderName::new("date")));
+        assert!(map.contains_key(&HeaderName::new("referer")));
+        assert!(map.contains_key(&HeaderName::new("rim")));
+        assert!(map.contains_key(&HeaderName::new("lea")));
+
+        println!("Insert Multi");
+
+        map.append(HeaderName::new("content-length"), HeaderValue::new("BAR"));
+
+        assert!(map.contains_key(&HeaderName::new("content-length")));
+        assert!(map.contains_key(&HeaderName::new("host")));
+        assert!(map.contains_key(&HeaderName::new("date")));
+        assert!(map.contains_key(&HeaderName::new("referer")));
+        assert!(map.contains_key(&HeaderName::new("rim")));
+
+        println!("GetAll");
+
+        let mut all = map.get_all(&HeaderName::new("content-length"));
+        assert!(matches!(all.next(), Some(v) if v.as_str() == "LEN"));
+        assert!(matches!(all.next(), Some(v) if v.as_str() == "BAR"));
+        assert!(all.next().is_none());
+
+        dbg!(map.len());
+
+        for (name,value) in map.iter() {
+            println!("=> {name},{value}");
+        }
+
+        println!("Remove");
+
+        assert!(map.remove(&HeaderName::new("accept")).is_some());
+        assert!(map.contains_key(&HeaderName::new("content-type")));
+        assert!(map.contains_key(&HeaderName::new("content-length")));
+        assert!(map.contains_key(&HeaderName::new("host")));
+        assert!(map.contains_key(&HeaderName::new("date")));
+        assert!(map.contains_key(&HeaderName::new("referer")));
+        assert!(map.contains_key(&HeaderName::new("rim")));
+        assert!(map.contains_key(&HeaderName::new("lea")));
+
+        println!("Remove Last");
+
+        assert!(map.remove(&HeaderName::new("lea")).is_some());
+        assert!(map.contains_key(&HeaderName::new("content-type")));
+        assert!(map.contains_key(&HeaderName::new("content-length")));
+        assert!(map.contains_key(&HeaderName::new("host")));
+        assert!(map.contains_key(&HeaderName::new("date")));
+        assert!(map.contains_key(&HeaderName::new("referer")));
+        assert!(map.contains_key(&HeaderName::new("rim")));
+
+        println!("Remove Multi");
+
+        assert!(map.remove(&HeaderName::new("content-length")).is_some());
+
+        dbg!(map.len());
+        dbg!(map);
+    }
+}
+
