@@ -1,5 +1,5 @@
 use bytes::Bytes;
-use std::{mem::take, str::from_utf8};
+use std::{mem::take, str::{from_utf8, FromStr}};
 
 use crate::common::ByteStr;
 
@@ -13,23 +13,59 @@ enum Repr {
     Str(ByteStr),
 }
 
+macro_rules! valid {
+    ($b:tt) => {
+        if $b >= 32 && $b != 127 || $b == b'\t' {
+        } else {
+            return Err(ERROR);
+        }
+    };
+}
+
 impl HeaderValue {
     pub(crate) const PLACEHOLDER: Self = Self {
         repr: Repr::Bytes(Bytes::new()),
     };
 
-    /// Create new [`HeaderValue`] from bytes.
-    pub fn new(value: impl Into<Bytes>) -> Self {
-        Self {
-            repr: Repr::Bytes(value.into()),
+    /// Parse [`HeaderValue`] from [`Bytes`].
+    pub fn try_from_slice(value: impl Into<Bytes>) -> Result<Self, InvalidHeaderValue> {
+        let bytes: Bytes = value.into();
+        for &b in &bytes {
+            valid!(b)
         }
+        Ok(Self {
+            repr: Repr::Bytes(bytes),
+        })
     }
 
-    /// Create new [`HeaderValue`] from string.
-    pub fn new_str(value: impl Into<ByteStr>) -> Self {
-        Self {
-            repr: Repr::Str(value.into()),
+    /// Parse [`HeaderValue`] from [`ByteStr`].
+    pub fn try_from_string(value: impl Into<ByteStr>) -> Result<HeaderValue, InvalidHeaderValue> {
+        let value = value.into();
+        for &b in value.as_bytes() {
+            valid!(b)
         }
+        Ok(Self {
+            repr: Repr::Str(value),
+        })
+    }
+
+    /// Parse [`HeaderValue`] by copying from slice.
+    pub fn try_copy_from_slice(value: &[u8]) -> Result<HeaderValue, InvalidHeaderValue> {
+        Self::try_from_slice(Bytes::copy_from_slice(value))
+    }
+
+    /// Parse [`HeaderValue`] by copying from str.
+    pub fn try_copy_from_string(value: &str) -> Result<HeaderValue, InvalidHeaderValue> {
+        Self::try_from_string(ByteStr::copy_from_str(value))
+    }
+
+    /// Parse [`HeaderValue`] from [`ByteStr`].
+    ///
+    /// # Panics
+    ///
+    /// This function will panic if header contains invalid character.
+    pub fn from_string(value: impl Into<ByteStr>) -> HeaderValue {
+        Self::try_from_string(value).expect("failed to parse header")
     }
 
     /// Try to parse value as [`str`].
@@ -60,11 +96,47 @@ impl HeaderValue {
     }
 }
 
+impl FromStr for HeaderValue {
+    type Err = InvalidHeaderValue;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Self::try_copy_from_string(s)
+    }
+}
+
+// ===== Debug =====
+
 impl std::fmt::Debug for HeaderValue {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("HeaderValue").finish()
     }
 }
+
+// ===== Error =====
+
+pub struct InvalidHeaderValue {
+    _p: ()
+}
+
+const ERROR: InvalidHeaderValue = InvalidHeaderValue {
+    _p: ()
+};
+
+impl std::error::Error for InvalidHeaderValue { }
+
+impl std::fmt::Display for InvalidHeaderValue {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("header contains invalid bytes")
+    }
+}
+
+impl std::fmt::Debug for InvalidHeaderValue {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("InvalidHeaderValue").finish()
+    }
+}
+
+// ===== Sequence =====
 
 /// Parse `"; "` separated value as [`Iterator`].
 ///

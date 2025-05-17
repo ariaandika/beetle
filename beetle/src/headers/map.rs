@@ -279,15 +279,15 @@ mod test {
 
         assert!(map.get(&HeaderName::new("content-type")).is_none());
 
-        map.insert(HeaderName::new("content-type"), HeaderValue::new("FOO"));
+        map.insert(HeaderName::new("content-type"), HeaderValue::from_string("FOO"));
         assert!(map.contains_key(&HeaderName::new("content-type")));
 
-        map.insert(HeaderName::new("accept"), HeaderValue::new("BAR"));
-        map.insert(HeaderName::new("content-length"), HeaderValue::new("LEN"));
-        map.insert(HeaderName::new("host"), HeaderValue::new("BAR"));
-        map.insert(HeaderName::new("date"), HeaderValue::new("BAR"));
-        map.insert(HeaderName::new("referer"), HeaderValue::new("BAR"));
-        map.insert(HeaderName::new("rim"), HeaderValue::new("BAR"));
+        map.insert(HeaderName::new("accept"), HeaderValue::from_string("BAR"));
+        map.insert(HeaderName::new("content-length"), HeaderValue::from_string("LEN"));
+        map.insert(HeaderName::new("host"), HeaderValue::from_string("BAR"));
+        map.insert(HeaderName::new("date"), HeaderValue::from_string("BAR"));
+        map.insert(HeaderName::new("referer"), HeaderValue::from_string("BAR"));
+        map.insert(HeaderName::new("rim"), HeaderValue::from_string("BAR"));
 
         assert!(map.contains_key(&HeaderName::new("content-type")));
         assert!(map.contains_key(&HeaderName::new("accept")));
@@ -299,7 +299,7 @@ mod test {
 
         println!("Insert Allocate");
 
-        map.insert(HeaderName::new("lea"), HeaderValue::new("BAR"));
+        map.insert(HeaderName::new("lea"), HeaderValue::from_string("BAR"));
 
         assert!(map.contains_key(&HeaderName::new("content-type")));
         assert!(map.contains_key(&HeaderName::new("accept")));
@@ -312,7 +312,7 @@ mod test {
 
         println!("Insert Multi");
 
-        map.append(HeaderName::new("content-length"), HeaderValue::new("BAR"));
+        map.append(HeaderName::new("content-length"), HeaderValue::from_string("BAR"));
 
         assert!(map.contains_key(&HeaderName::new("content-length")));
         assert!(map.contains_key(&HeaderName::new("host")));
@@ -321,9 +321,9 @@ mod test {
         assert!(map.contains_key(&HeaderName::new("rim")));
 
         let mut all = map.get_all(&HeaderName::new("content-length"));
-        // assert!(matches!(all.next(), Some(v) if v.as_str() == "LEN"));
-        // assert!(matches!(all.next(), Some(v) if v.as_str() == "BAR"));
-        // assert!(all.next().is_none());
+        assert!(matches!(all.next(), Some(v) if matches!(v.as_str(),Ok("LEN"))));
+        assert!(matches!(all.next(), Some(v) if matches!(v.as_str(),Ok("BAR"))));
+        assert!(all.next().is_none());
 
         assert!(map.remove(&HeaderName::new("accept")).is_some());
         assert!(map.contains_key(&HeaderName::new("content-type")));
