@@ -3,6 +3,7 @@ use std::{mem::take, str::from_utf8};
 
 use crate::common::ByteStr;
 
+/// HTTP Header Value.
 pub struct HeaderValue {
     repr: Repr,
 }

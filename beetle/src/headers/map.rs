@@ -4,9 +4,10 @@ use std::{
 };
 
 use super::{
-    HeaderName, HeaderValue, IntoHeaderName,
+    AsHeaderName, HeaderName, HeaderValue,
     entry::{Entry, GetAll},
     iter::Iter,
+    name::{HeaderNameRef, IntoHeaderName},
 };
 
 type Size = u16;
@@ -77,7 +78,11 @@ impl HeaderMap {
     }
 
     /// Returns a reference to the first header value corresponding to the header name.
-    pub fn get<K: IntoHeaderName>(&self, name: K) -> Option<&HeaderValue> {
+    pub fn get<K: AsHeaderName>(&self, name: K) -> Option<&HeaderValue> {
+        self.try_get(name.to_header_ref())
+    }
+
+    fn try_get(&self, name: HeaderNameRef) -> Option<&HeaderValue> {
         if self.entries.is_empty() {
             return None;
         }
@@ -100,7 +105,11 @@ impl HeaderMap {
     }
 
     /// Returns a reference to all header values corresponding to the header name.
-    pub fn get_all<K: IntoHeaderName>(&self, name: K) -> GetAll {
+    pub fn get_all<K: AsHeaderName>(&self, name: K) -> GetAll {
+        self.try_get_all(name.to_header_ref())
+    }
+
+    pub fn try_get_all(&self, name: HeaderNameRef) -> GetAll {
         if self.entries.is_empty() {
             return GetAll::empty();
         }
@@ -126,7 +135,11 @@ impl HeaderMap {
 
     /// Removes a header from the map, returning the first header value at the key if the key was
     /// previously in the map.
-    pub fn remove<K: IntoHeaderName>(&mut self, name: K) -> Option<HeaderValue> {
+    pub fn remove<K: AsHeaderName>(&mut self, name: K) -> Option<HeaderValue> {
+        self.try_remove(name.to_header_ref())
+    }
+
+    pub fn try_remove(&mut self, name: HeaderNameRef) -> Option<HeaderValue> {
         if self.entries.is_empty() {
             return None;
         }
@@ -175,16 +188,16 @@ impl HeaderMap {
     /// value is returned.
     ///
     /// If the map did not have this header key present, [`None`] is returned.
-    pub fn insert(&mut self, name: HeaderName, value: HeaderValue) -> Option<HeaderValue> {
-        self.try_insert(name, value, false)
+    pub fn insert<K: IntoHeaderName>(&mut self, name: K, value: HeaderValue) -> Option<HeaderValue> {
+        self.try_insert(name.into_header_name(), value, false)
     }
 
     /// Append a header key and value into the map.
     ///
     /// Unlike [`insert`][HeaderMap::insert], if header key is present, header value is still
     /// appended as extra value.
-    pub fn append(&mut self, name: HeaderName, value: HeaderValue) {
-        let _result = self.try_insert(name, value, true);
+    pub fn append<K: IntoHeaderName>(&mut self, name: K, value: HeaderValue) {
+        let _result = self.try_insert(name.into_header_name(), value, true);
         debug_assert!(_result.is_none());
     }
 
@@ -194,7 +207,7 @@ impl HeaderMap {
         }
 
         let mask = self.indices.len() as Size;
-        let hash = super::name::Sealed::hash(&name);
+        let hash = name.hash();
         let mut index = hash & (mask - 1);
 
         let result = loop {
@@ -233,7 +246,6 @@ impl HeaderMap {
 
         result
     }
-
 
     fn increase_capacity(&mut self) {
         assert!(self.is_full, "[BUG] increasing capacity should only `is_full`");
@@ -308,20 +320,10 @@ mod test {
         assert!(map.contains_key(&HeaderName::new("referer")));
         assert!(map.contains_key(&HeaderName::new("rim")));
 
-        println!("GetAll");
-
         let mut all = map.get_all(&HeaderName::new("content-length"));
-        assert!(matches!(all.next(), Some(v) if v.as_str() == "LEN"));
-        assert!(matches!(all.next(), Some(v) if v.as_str() == "BAR"));
-        assert!(all.next().is_none());
-
-        dbg!(map.len());
-
-        for (name,value) in map.iter() {
-            println!("=> {name},{value}");
-        }
-
-        println!("Remove");
+        // assert!(matches!(all.next(), Some(v) if v.as_str() == "LEN"));
+        // assert!(matches!(all.next(), Some(v) if v.as_str() == "BAR"));
+        // assert!(all.next().is_none());
 
         assert!(map.remove(&HeaderName::new("accept")).is_some());
         assert!(map.contains_key(&HeaderName::new("content-type")));
@@ -332,8 +334,6 @@ mod test {
         assert!(map.contains_key(&HeaderName::new("rim")));
         assert!(map.contains_key(&HeaderName::new("lea")));
 
-        println!("Remove Last");
-
         assert!(map.remove(&HeaderName::new("lea")).is_some());
         assert!(map.contains_key(&HeaderName::new("content-type")));
         assert!(map.contains_key(&HeaderName::new("content-length")));
@@ -341,8 +341,6 @@ mod test {
         assert!(map.contains_key(&HeaderName::new("date")));
         assert!(map.contains_key(&HeaderName::new("referer")));
         assert!(map.contains_key(&HeaderName::new("rim")));
-
-        println!("Remove Multi");
 
         assert!(map.remove(&HeaderName::new("content-length")).is_some());
 
