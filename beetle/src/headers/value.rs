@@ -68,6 +68,14 @@ impl HeaderValue {
         Self::try_from_string(value).expect("failed to parse header")
     }
 
+    /// Returns value as slice.
+    pub fn as_bytes(&self) -> &[u8] {
+        match &self.repr {
+            Repr::Bytes(b) => b,
+            Repr::Str(s) => s.as_bytes(),
+        }
+    }
+
     /// Try to parse value as [`str`].
     pub fn as_str(&self) -> Result<&str, std::str::Utf8Error> {
         match &self.repr {

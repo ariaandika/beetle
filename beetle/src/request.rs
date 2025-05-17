@@ -2,7 +2,7 @@
 use crate::{
     IntoResponse,
     common::ByteStr,
-    headers::Headers,
+    headers::HeaderMap,
     http::{Extensions, Method, Version},
 };
 
@@ -91,7 +91,7 @@ impl Request {
     }
 
     /// Returns HTTP Headers.
-    pub fn headers(&self) -> &Headers {
+    pub fn headers(&self) -> &HeaderMap {
         self.parts.headers()
     }
 }

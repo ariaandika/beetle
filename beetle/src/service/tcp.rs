@@ -14,7 +14,7 @@ use std::{
 use super::HttpService;
 use crate::{
     common::ByteStr,
-    headers::{Header, Headers},
+    headers::{HeaderMap, HeaderValue},
     http::{Method, Version},
     io::{StreamReadExt, StreamWriteExt},
     net::Socket,
@@ -33,6 +33,10 @@ fn parse_str(val: &[u8]) -> Result<&str, io::Error> {
 
 fn parse_int(val: &[u8]) -> Result<usize, io::Error> {
     parse_str(val)?.parse().map_err(to_io)
+}
+
+fn parse_header(val: &[u8]) -> Result<HeaderValue, io::Error> {
+    HeaderValue::try_copy_from_slice(val).map_err(to_io)
 }
 
 #[derive(Debug, Clone)]
@@ -130,7 +134,7 @@ where
                     let headers = &buffer[header_offset..];
 
                     let mut parser = HeaderParser::new(headers);
-                    let mut headers_map = Vec::with_capacity(8);
+                    let mut header_map = HeaderMap::new();
                     let mut content_len = 0;
 
                     for result in &mut parser {
@@ -141,10 +145,9 @@ where
                         }
 
                         // TODO: prevent copy
-                        headers_map.push(Header::new(
-                            ByteStr::copy_from_str(parse_str(key)?),
-                            Bytes::copy_from_slice(val),
-                        ));
+                        let name = parse_str(key)?;
+                        let value = parse_header(val)?;
+                        header_map.append(ByteStr::copy_from_str(name), value);
                     }
 
                     if !parser.complete() {
@@ -175,8 +178,7 @@ where
 
                     // `buffer` now empty
 
-                    let headers = Headers::from_buffer(headers_map);
-                    let parts = Parts::new(method, path, version, headers, <_>::default());
+                    let parts = Parts::new(method, path, version, header_map, <_>::default());
                     let body = request::Body::new(content_len, Some(io.clone()), body.freeze());
                     let request = Request::from_parts(parts, body);
 

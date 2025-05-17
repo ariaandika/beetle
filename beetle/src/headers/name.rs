@@ -132,6 +132,14 @@ pub(crate) trait Sealed: Sized {
     fn into_header_name(self) -> HeaderName;
 }
 
+impl Sealed for ByteStr {
+    fn into_header_name(self) -> HeaderName {
+        HeaderName {
+            repr: Repr::Custom(self),
+        }
+    }
+}
+
 impl Sealed for &'static str {
     fn into_header_name(self) -> HeaderName {
         HeaderName {
@@ -148,6 +156,7 @@ impl Sealed for HeaderName {
 
 pub trait IntoHeaderName: Sealed {}
 impl IntoHeaderName for HeaderName {}
+impl IntoHeaderName for ByteStr {}
 impl IntoHeaderName for &'static str {}
 
 // ===== Debug =====

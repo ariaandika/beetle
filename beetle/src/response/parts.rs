@@ -1,5 +1,5 @@
 use crate::{
-    headers::Headers,
+    headers::HeaderMap,
     http::{Extensions, StatusCode, Version},
 };
 
@@ -8,7 +8,7 @@ use crate::{
 pub struct Parts {
     version: Version,
     status: StatusCode,
-    headers: Headers,
+    headers: HeaderMap,
     extensions: Extensions,
 }
 
@@ -16,7 +16,7 @@ impl Parts {
     pub(crate) fn new(
         version: Version,
         status: StatusCode,
-        headers: Headers,
+        headers: HeaderMap,
         extensions: Extensions,
     ) -> Self {
         Self {
@@ -43,22 +43,13 @@ impl Parts {
     }
 
     /// Returns HTTP Headers.
-    pub fn headers(&self) -> &Headers {
+    pub fn headers(&self) -> &HeaderMap {
         &self.headers
     }
 
-    /// Insert header.
-    pub fn insert_header(&mut self, key: &[u8], value: &[u8]) {
-        todo!()
-        // self.headers.put(key);
-        // self.headers.put(&b": "[..]);
-        // self.headers.put(value);
-        // self.headers.put(&b"\r\n"[..]);
-        // if self.header_len >= HEADER_SIZE {
-        //     return;
-        // }
-        // self.headers[self.header_len] = header;
-        // self.header_len += 1;
+    /// Returns HTTP Headers.
+    pub fn headers_mut(&mut self) -> &mut HeaderMap {
+        &mut self.headers
     }
 }
 

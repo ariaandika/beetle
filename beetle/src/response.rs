@@ -1,6 +1,6 @@
 //! HTTP Response.
 use crate::{
-    headers::Headers,
+    headers::HeaderMap,
     http::{StatusCode, Version},
 };
 
@@ -77,8 +77,8 @@ impl Response {
         self.parts.status()
     }
 
-    /// Returns HTTP Headers.
-    pub fn headers(&self) -> &Headers {
+    /// Returns HTTP HeaderMap.
+    pub fn headers(&self) -> &HeaderMap {
         self.parts.headers()
     }
 }
@@ -88,7 +88,7 @@ impl std::fmt::Debug for Response {
         f.debug_struct("Response")
             .field("version", &self.parts.version())
             .field("status", &self.parts.status())
-            .field("headers", &self.parts.headers())
+            .field("headers", self.parts.headers())
             .finish()
     }
 }

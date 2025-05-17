@@ -1,6 +1,6 @@
 use crate::{
     common::ByteStr,
-    headers::Headers,
+    headers::HeaderMap,
     http::{Extensions, Method, Version},
 };
 
@@ -10,7 +10,7 @@ pub struct Parts {
     method: Method,
     path: ByteStr,
     version: Version,
-    headers: Headers,
+    headers: HeaderMap,
     extensions: Extensions,
 }
 
@@ -19,7 +19,7 @@ impl Parts {
         method: Method,
         path: ByteStr,
         version: Version,
-        headers: Headers,
+        headers: HeaderMap,
         extensions: Extensions,
     ) -> Self {
         Self {
@@ -47,7 +47,7 @@ impl Parts {
     }
 
     /// Returns HTTP Headers.
-    pub fn headers(&self) -> &Headers {
+    pub fn headers(&self) -> &HeaderMap {
         &self.headers
     }
 
